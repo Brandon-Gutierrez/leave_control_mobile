@@ -72,7 +72,9 @@ class ApiService {
   Future<Map<String, dynamic>?> checkData() async {
     final Response response;
     try {
-      response = await _dio.get(ApiRoutes.leaveStatus, options: _acceptClientErrors);
+      response = await _dio.get(ApiRoutes.leaveStatus, queryParameters: {
+        'item' : await _storageService.getItem(),
+      }, options: _acceptClientErrors);
     } catch (e) {
       return null;
     }
