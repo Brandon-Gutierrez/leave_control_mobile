@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 
 import '../../services/api_service.dart';
+import '../../theme/app_colors.dart';
+import '../../theme/app_text_styles.dart';
 import 'home_page.dart';
 
 class LoginPage extends StatefulWidget {
@@ -19,9 +21,9 @@ class _LoginPageState extends State<LoginPage> {
   bool _isLoading = false;
   bool _isPasswordObscured = true;
 
-  static const Color primaryRed = Color(0xFFD32F2F);
+  static const Color primaryRed = AppColors.primaryRed;
   static const Color darkText = Color(0xFF1A1A1A);
-  static const Color lightBg = Color(0xFFF5F5F5);
+  static const Color lightBg = AppColors.loginBg;
 
   @override
   void dispose() {
@@ -193,7 +195,7 @@ class _LoginPageState extends State<LoginPage> {
 
                       // Botón DE INGRESO
                       SizedBox(
-                        height: 50,
+                        height: AppDimens.buttonHeight,
                         child: ElevatedButton(
                           onPressed: _isLoading ? null : _login,
                           style: ElevatedButton.styleFrom(

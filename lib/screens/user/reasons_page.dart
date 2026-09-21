@@ -1,12 +1,16 @@
 import 'package:flutter/material.dart';
 
 import '../../services/api_service.dart';
+import '../../theme/app_colors.dart';
+import '../../theme/app_text_styles.dart';
 import 'home_page.dart';
 import 'login_page.dart';
 
 class ReasonPage extends StatefulWidget {
   final String qrData;
-  const ReasonPage({super.key, required this.qrData});
+  /// Permite inyectar un [ApiService] de prueba (p. ej. en tests de widgets).
+  final ApiService? apiService;
+  const ReasonPage({super.key, required this.qrData, this.apiService});
 
   @override
   State<ReasonPage> createState() => _ReasonPageState();
@@ -14,7 +18,7 @@ class ReasonPage extends StatefulWidget {
 
 class _ReasonPageState extends State<ReasonPage>{
 
-  final ApiService _apiService = ApiService();
+  late final ApiService _apiService = widget.apiService ?? ApiService();
 
   String _namePremise = '';
   String? _selectedReason;
@@ -23,9 +27,9 @@ class _ReasonPageState extends State<ReasonPage>{
   String? _errorMessage;
   List<String> _reasons = [];
 
-  static const primaryRed = Color(0xFFD32F2F);
-  static const darkText = Color(0xFF111111);
-  static const lightBg = Color(0xFFFAFAFA);
+  static const primaryRed = AppColors.primaryRed;
+  static const darkText = AppColors.darkText;
+  static const lightBg = AppColors.lightBg;
 
   @override
   void initState(){
@@ -292,7 +296,7 @@ class _ReasonPageState extends State<ReasonPage>{
                   child: Text(
                     reason,
                     style: TextStyle(
-                      fontSize: 15,
+                      fontSize: 16,
                       fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
                       color: isSelected ? darkText : Colors.grey.shade800,
                     ),
@@ -323,7 +327,7 @@ class _ReasonPageState extends State<ReasonPage>{
             child: ConstrainedBox(
               constraints: const BoxConstraints(maxWidth: 520),
               child: SizedBox(
-                height: 52,
+                height: AppDimens.buttonHeight,
                 width: double.infinity,
                 child: ElevatedButton(
                   style: ElevatedButton.styleFrom(
@@ -345,7 +349,7 @@ class _ReasonPageState extends State<ReasonPage>{
                         )
                       : const Text(
                           'Confirmar Selección',
-                          style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
+                          style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
                         ),
                 ),
               ),

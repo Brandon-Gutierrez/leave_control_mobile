@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 import '../../services/api_service.dart';
+import '../../theme/app_text_styles.dart';
 import 'home_page.dart';
 import 'login_page.dart';
 import 'reasons_page.dart';
@@ -152,45 +153,176 @@ class _ScanPageState extends State<ScanPage> {
                       : Icons.flash_off_rounded,
                   color: Colors.white,
                 ),
-                onPressed: () => _scannerController.toggleTorch(),
+                onPressed: state.isInitialized ? () => _scannerController.toggleTorch() : null,
               );
             },
           ),
           // Cambiar Cámara (frontal / trasera)
-          IconButton(
-            icon: const Icon(Icons.cameraswitch_rounded, color: Colors.white),
-            onPressed: () => _scannerController.switchCamera(),
+          ValueListenableBuilder(
+            valueListenable: _scannerController,
+            builder: (context, state, child) {
+              return IconButton(
+                icon: const Icon(Icons.cameraswitch_rounded, color: Colors.white),
+                onPressed: state.isInitialized ? () => _scannerController.switchCamera() : null,
+              );
+            },
           ),
         ],
       ),
-      body: Stack(
-        fit: StackFit.expand,
-        children: [
-          // 1. Lector de Cámara
-          MobileScanner(
-            controller: _scannerController,
-            onDetect: _onDetect,
-          ),
+      body: ValueListenableBuilder<MobileScannerState>(
+        valueListenable: _scannerController,
+        builder: (context, state, child) {
+          
+          return Stack(
+            fit: StackFit.expand,
+            children: [
+              MobileScanner(
+                controller: _scannerController,
+                onDetect: _onDetect,
+              ),
 
-          // 2. Máscara/Overlay Minimalista
-          Center(
-            child: Container(
-              width: frameSize,
-              height: frameSize,
-              decoration: BoxDecoration(
-                border: Border.all(color: primaryRed, width: 3),
-                borderRadius: BorderRadius.circular(20),
+              if (state.error != null)
+                _buildCameraError(state.error!)
+              else if (!state.isInitialized)
+                _buildCameraStarting(),
+
+              if (state.isInitialized && _isProcessing)
+                Container(
+                  color: Colors.black.withValues(alpha: 0.55),
+                  child: const Center(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        CircularProgressIndicator(
+                          color: Colors.white,
+                        ),
+                        SizedBox(height: 16),
+                        Text(
+                          'Verificando...',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 16,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _buildCameraStarting() {
+    return const Center(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          CircularProgressIndicator(color: Colors.white),
+          SizedBox(height: 20),
+          Text(
+            'Iniciando cámara...',
+            style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w600),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildCameraError(MobileScannerException error) {
+    final isPermission = error.errorCode == MobileScannerErrorCode.permissionDenied;
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 32),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              isPermission ? Icons.no_photography_rounded : Icons.error_outline_rounded,
+              color: Colors.white,
+              size: 48,
+            ),
+            const SizedBox(height: 16),
+            Text(
+              isPermission
+                  ? 'Necesitamos permiso de la cámara para escanear el código QR.'
+                  : 'No se pudo iniciar la cámara.',
+              textAlign: TextAlign.center,
+              style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w600),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              isPermission
+                  ? 'Actívalo en los ajustes de tu teléfono y vuelve a intentar.'
+                  : error.errorCode.message,
+              textAlign: TextAlign.center,
+              style: TextStyle(color: Colors.grey.shade300, fontSize: 14),
+            ),
+            const SizedBox(height: 24),
+            SizedBox(
+              height: AppDimens.buttonHeight,
+              child: ElevatedButton.icon(
+                onPressed: () => _scannerController.start(),
+                icon: const Icon(Icons.refresh_rounded),
+                label: const Text('Reintentar'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: primaryRed,
+                  foregroundColor: Colors.white,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildScanner(double frameSize, MediaQueryData mediaQuery) {
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        // 1. Lector de Cámara
+        MobileScanner(
+          controller: _scannerController,
+          onDetect: _onDetect,
+        ),
+
+        // 2. Máscara/Overlay Minimalista
+        Center(
+          child: Container(
+            width: frameSize,
+            height: frameSize,
+            decoration: BoxDecoration(
+              border: Border.all(color: primaryRed, width: 3),
+              borderRadius: BorderRadius.circular(20),
+            ),
+          ),
+        ),
+
+        // 3. Indicador de procesamiento (nunca queda "colgado" sin aviso)
+        if (_isProcessing)
+          Container(
+            color: Colors.black.withValues(alpha: 0.55),
+            child: const Center(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  CircularProgressIndicator(color: Colors.white),
+                  SizedBox(height: 16),
+                  Text(
+                    'Verificando...',
+                    style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w600),
+                  ),
+                ],
               ),
             ),
           ),
 
-          // 3. Indicador de procesamiento
-          if (_isProcessing)
-            const Center(
-              child: CircularProgressIndicator(color: Colors.white),
-            ),
-
-          // 4. Indicador de texto inferior
+        // 4. Indicador de texto inferior
+        if (!_isProcessing)
           Positioned(
             bottom: mediaQuery.padding.bottom + 32,
             left: 20,
@@ -217,8 +349,7 @@ class _ScanPageState extends State<ScanPage> {
               ),
             ),
           ),
-        ],
-      ),
+      ],
     );
   }
 }

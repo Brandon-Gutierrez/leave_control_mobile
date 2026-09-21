@@ -64,17 +64,20 @@ class ApiService {
     } catch (_) {
       // Aunque falle la red, la sesión local se elimina igualmente
     }
-    await _apiConfig.clearSession();
-    await _storageService.deleteData();
+    try {
+      await _apiConfig.clearSession();
+      await _storageService.deleteData();
+    } catch (_) {
+      // No debe impedir volver al login aunque falle el borrado local.
+    }
   }
 
   //Obtiene los datos y el estado de salida del usuario autenticado
+  //(el item se identifica por la sesión, no hace falta enviarlo)
   Future<Map<String, dynamic>?> checkData() async {
     final Response response;
     try {
-      response = await _dio.get(ApiRoutes.leaveStatus, queryParameters: {
-        'item' : await _storageService.getItem(),
-      }, options: _acceptClientErrors);
+      response = await _dio.get(ApiRoutes.leaveStatus, options: _acceptClientErrors);
     } catch (e) {
       return null;
     }
@@ -82,15 +85,23 @@ class ApiService {
     if (response.statusCode != 200) return null;
 
     final Map<String, dynamic> responseData = response.data;
-    final String? token = responseData['token'];
-    final String? name = responseData['name'];
-    final String? localToken = await _storageService.getToken();
-    final String? localName = await _storageService.getName();
 
-    //Si los datos cambiaron, los actualiza
-    if (token != null && name != null && (token != localToken || name != localName)) {
-      await _storageService.updateData(token, name);
+    // Sincroniza el nombre/token guardados localmente si cambiaron. Esto es
+    // solo caché local: si el almacenamiento seguro falla por cualquier
+    // motivo, no debe impedir que se muestre el estado de salida del usuario.
+    try {
+      final String? token = responseData['token'];
+      final String? name = responseData['name'];
+      final String? localToken = await _storageService.getToken();
+      final String? localName = await _storageService.getName();
+      if (token != null && name != null && (token != localToken || name != localName)) {
+        await _storageService.updateData(token, name);
+      }
+    } catch (e) {
+      // Se ignora: la información principal (isLeave, dateLeave, reason)
+      // ya está disponible en responseData.
     }
+
     return responseData;
   }
 
