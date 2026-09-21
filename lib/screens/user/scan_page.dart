@@ -176,16 +176,33 @@ class _ScanPageState extends State<ScanPage> {
           return Stack(
             fit: StackFit.expand,
             children: [
+              //CAMARA
               MobileScanner(
                 controller: _scannerController,
                 onDetect: _onDetect,
               ),
-
+              //MAARCO DE ESCANEO
+              Center(
+                child: Container(
+                  width: frameSize,
+                  height: frameSize,
+                  decoration: BoxDecoration(
+                    border: Border.all(
+                      color: primaryRed,
+                      width: 3,
+                    ),
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                ),
+              ),
+              
+              //ESTADO DE LA CAMARA
               if (state.error != null)
                 _buildCameraError(state.error!)
               else if (!state.isInitialized)
                 _buildCameraStarting(),
 
+              //PROCESAMIENTO DEL QR
               if (state.isInitialized && _isProcessing)
                 Container(
                   color: Colors.black.withValues(alpha: 0.55),
@@ -209,6 +226,40 @@ class _ScanPageState extends State<ScanPage> {
                     ),
                   ),
                 ),
+              
+              //TEXTO INFERIOR
+              if (!_isProcessing && state.isInitialized)
+              Positioned(
+                bottom: mediaQuery.padding.bottom + 32,
+                left: 20,
+                right: 20,
+                child: Center(
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(
+                      maxHeight: 420,
+                    ),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        vertical: 12,
+                        horizontal: 16,
+                      ),
+                      decoration: BoxDecoration(
+                        color: Colors.black.withValues(alpha: 0.7),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: const Text(
+                        'Apunta el código QR dentro del marco',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 13,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      )
+                    ),
+                  ),
+                ),
+              )
             ],
           );
         },
@@ -279,7 +330,7 @@ class _ScanPageState extends State<ScanPage> {
       ),
     );
   }
-
+  /*
   Widget _buildScanner(double frameSize, MediaQueryData mediaQuery) {
     return Stack(
       fit: StackFit.expand,
@@ -351,5 +402,5 @@ class _ScanPageState extends State<ScanPage> {
           ),
       ],
     );
-  }
+  }*/
 }
