@@ -1,5 +1,6 @@
 import 'package:dio/dio.dart';
 
+import 'location_service.dart';
 import 'storage_service.dart';
 import '../config/api_config.dart';
 import '../config/api_routes.dart';
@@ -16,6 +17,10 @@ class SessionExpiredException implements Exception {
 
 class ApiService {
   final StorageService _storageService = StorageService();
+  final LocationService _locationService;
+
+  ApiService({LocationService? locationService})
+    : _locationService = locationService ?? LocationService();
   final ApiConfig _apiConfig = ApiConfig();
 
   Dio get _dio => _apiConfig.dio;
@@ -107,11 +112,13 @@ class ApiService {
 
   //Envia el QR escaneado y devuelve la accion a realizar (mostrar motivos o retorno)
   Future<Map<String, dynamic>?> userStatus(String qrData) async {
+    // Lanza LocationException si no hay una ubicación confiable.
+    final location = await _locationService.capture();
     final Response response;
     try {
       response = await _dio.post(
         ApiRoutes.qrScan,
-        data: {'qrData': qrData},
+        data: {'qrData': qrData, ...location.toJson()},
         options: _acceptClientErrors,
       );
     } catch (e) {
@@ -139,6 +146,7 @@ class ApiService {
 
   //Realiza la solicitud de salida del usuario
   Future<bool> confirmLeave(String namePremise, String nameReason, String qrData) async {
+    final location = await _locationService.capture();
     final Response response;
     try {
       response = await _dio.post(
@@ -147,6 +155,7 @@ class ApiService {
           'qrData': qrData,
           'namePremise': namePremise,
           'nameReason': nameReason,
+          ...location.toJson(),
         },
         options: _acceptClientErrors,
       );
@@ -154,6 +163,11 @@ class ApiService {
       return false;
     }
     _throwIfUnauthorized(response);
+    if (response.statusCode == 403 &&
+        response.data is Map &&
+        response.data['message'] is String) {
+      throw LocationException(response.data['message'] as String);
+    }
     return response.statusCode == 200;
   }
 }

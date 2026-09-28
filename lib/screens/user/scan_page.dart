@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 import '../../services/api_service.dart';
+import '../../services/location_service.dart';
 import '../../theme/app_text_styles.dart';
 import 'home_page.dart';
 import 'login_page.dart';
@@ -95,6 +96,8 @@ class _ScanPageState extends State<ScanPage> {
           (route) => false,
         );
       }
+    } on LocationException catch (e) {
+      if (mounted) handleError(e.message);
     } on SessionExpiredException catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -215,7 +218,7 @@ class _ScanPageState extends State<ScanPage> {
                         ),
                         SizedBox(height: 16),
                         Text(
-                          'Verificando...',
+                          'Verificando ubicación y código...',
                           style: TextStyle(
                             color: Colors.white,
                             fontSize: 16,
@@ -330,77 +333,4 @@ class _ScanPageState extends State<ScanPage> {
       ),
     );
   }
-  /*
-  Widget _buildScanner(double frameSize, MediaQueryData mediaQuery) {
-    return Stack(
-      fit: StackFit.expand,
-      children: [
-        // 1. Lector de Cámara
-        MobileScanner(
-          controller: _scannerController,
-          onDetect: _onDetect,
-        ),
-
-        // 2. Máscara/Overlay Minimalista
-        Center(
-          child: Container(
-            width: frameSize,
-            height: frameSize,
-            decoration: BoxDecoration(
-              border: Border.all(color: primaryRed, width: 3),
-              borderRadius: BorderRadius.circular(20),
-            ),
-          ),
-        ),
-
-        // 3. Indicador de procesamiento (nunca queda "colgado" sin aviso)
-        if (_isProcessing)
-          Container(
-            color: Colors.black.withValues(alpha: 0.55),
-            child: const Center(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  CircularProgressIndicator(color: Colors.white),
-                  SizedBox(height: 16),
-                  Text(
-                    'Verificando...',
-                    style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w600),
-                  ),
-                ],
-              ),
-            ),
-          ),
-
-        // 4. Indicador de texto inferior
-        if (!_isProcessing)
-          Positioned(
-            bottom: mediaQuery.padding.bottom + 32,
-            left: 20,
-            right: 20,
-            child: Center(
-              child: ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 420),
-                child: Container(
-                  padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
-                  decoration: BoxDecoration(
-                    color: Colors.black.withValues(alpha: 0.7),
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: const Text(
-                    'Apunta al código QR dentro del marco',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 13,
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
-                ),
-              ),
-            ),
-          ),
-      ],
-    );
-  }*/
 }

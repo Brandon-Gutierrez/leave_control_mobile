@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../services/api_service.dart';
+import '../../services/location_service.dart';
 import '../../theme/app_colors.dart';
 import '../../theme/app_text_styles.dart';
 import 'home_page.dart';
@@ -123,6 +124,14 @@ class _ReasonPageState extends State<ReasonPage>{
     );
   } on SessionExpiredException catch (e) {
     _goToLogin(e.message);
+  } on LocationException catch (e) {
+    if (!mounted) return;
+    setState(() {
+      _isSubmitting = false;
+    });
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(e.message), backgroundColor: Colors.red),
+    );
   } catch (e) {
     if (!mounted) return;
 
