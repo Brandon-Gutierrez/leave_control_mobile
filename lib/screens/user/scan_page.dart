@@ -3,6 +3,7 @@ import 'package:mobile_scanner/mobile_scanner.dart';
 import '../../services/api_service.dart';
 import '../../services/location_service.dart';
 import '../../theme/app_text_styles.dart';
+import '../../widgets/error_popup.dart';
 import 'home_page.dart';
 import 'login_page.dart';
 import 'reasons_page.dart';
@@ -41,13 +42,7 @@ class _ScanPageState extends State<ScanPage> {
     final String qrData = barcodes.first.rawValue!;
 
     void handleError(String message){
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(message),
-          backgroundColor: Colors.red,
-          duration: const Duration(seconds: 2),
-        ),
-      );
+      showErrorPopup(context, message);
       _scannerController.start();
       setState((){
         _isProcessing = false;
@@ -64,17 +59,7 @@ class _ScanPageState extends State<ScanPage> {
       final response = await _apiService.userStatus(qrData);
       if (!mounted) return;
 
-      if (response == null) {
-        // En caso de que la respuesta de la API sea nula
-        handleError('Código QR inválido o vencido.');
-        return;
-      }
-
       final String message = response['message'] ?? 'Acción completada.';
-      if (response['status'] == 1){
-        handleError(message);
-        return;
-      }
 
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -85,9 +70,26 @@ class _ScanPageState extends State<ScanPage> {
       );
 
       if (response['action'] == 'showReasons') {
+        // El servidor devuelve un comprobante (leaveTicket) distinto del QR
+        // escaneado: es lo que hay que enviar al confirmar el motivo, no el
+        // texto del QR original.
+        final leaveTicket = (response['leaveTicket'] ?? response['qrData'])?.toString();
+        final ticketExpiresAt = response['leaveTicketExpiresAt'] != null
+            ? DateTime.tryParse(response['leaveTicketExpiresAt'].toString())
+            : null;
+        if (leaveTicket == null || leaveTicket.isEmpty) {
+          handleError('No se pudo iniciar la selección de motivo. Vuelva a escanear.');
+          return;
+        }
         Navigator.pushReplacement(
           context,
-          MaterialPageRoute(builder: (context) => ReasonPage(qrData: qrData)),
+          MaterialPageRoute(
+            builder: (context) => ReasonPage(
+              qrData: qrData,
+              leaveTicket: leaveTicket,
+              ticketExpiresAt: ticketExpiresAt,
+            ),
+          ),
         );
       } else {
         Navigator.pushAndRemoveUntil(
@@ -96,13 +98,13 @@ class _ScanPageState extends State<ScanPage> {
           (route) => false,
         );
       }
+    } on ApiRequestException catch (e) {
+      if (mounted) handleError(e.message);
     } on LocationException catch (e) {
       if (mounted) handleError(e.message);
     } on SessionExpiredException catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(e.message), backgroundColor: Colors.red),
-      );
+      showErrorPopup(context, e.message);
       Navigator.pushAndRemoveUntil(
         context,
         MaterialPageRoute(builder: (context) => const LoginPage()),

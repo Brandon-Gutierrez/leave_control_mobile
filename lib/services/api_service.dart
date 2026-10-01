@@ -15,6 +15,23 @@ class SessionExpiredException implements Exception {
   String toString() => message;
 }
 
+/// Error de una petición al backend: red caída, tiempo de espera agotado, o
+/// una respuesta de error con un mensaje ya pensado para mostrarse (p. ej.
+/// "Este QR venció..."). Sirve para no mostrar mensajes genéricos que
+/// confunden distintos motivos de falla bajo un mismo texto.
+class ApiRequestException implements Exception {
+  final String message;
+
+  /// Código del backend (p. ej. QR_EXPIRED_OR_INVALID, LEAVE_TICKET_EXPIRED)
+  /// cuando la respuesta lo trae. Null si fue un error de red.
+  final String? code;
+
+  ApiRequestException(this.message, {this.code});
+
+  @override
+  String toString() => message;
+}
+
 class ApiService {
   final StorageService _storageService = StorageService();
   final LocationService _locationService;
@@ -25,9 +42,11 @@ class ApiService {
 
   Dio get _dio => _apiConfig.dio;
 
-  // Acepta respuestas 4xx para poder leer el mensaje del backend
-  static final Options _acceptClientErrors = Options(
-    validateStatus: (status) => status != null && status < 500,
+  // Acepta cualquier código de estado: el backend siempre devuelve un JSON
+  // con un mensaje entendible (incluso en 5xx), así que se procesa aquí en
+  // vez de dejar que Dio lo convierta en una excepción genérica.
+  static final Options _acceptAnyStatus = Options(
+    validateStatus: (status) => true,
   );
 
   void _throwIfUnauthorized(Response response) {
@@ -40,32 +59,94 @@ class ApiService {
     }
   }
 
+  /// Convierte un fallo de red (sin respuesta del servidor) en un mensaje
+  /// claro según el motivo, en vez de uno genérico igual para todos los casos.
+  ApiRequestException _networkError(DioException e) {
+    final message = switch (e.type) {
+      DioExceptionType.connectionTimeout ||
+      DioExceptionType.sendTimeout ||
+      DioExceptionType.receiveTimeout =>
+        'La conexión tardó demasiado. Verifica tu internet e intenta nuevamente.',
+      DioExceptionType.connectionError =>
+        'No hay conexión a internet. Verifica tu red e intenta nuevamente.',
+      _ => 'No se pudo completar la solicitud. Intenta nuevamente.',
+    };
+    return ApiRequestException(message);
+  }
+
+  /// Extrae el mensaje que envía el backend en una respuesta de error, si lo
+  /// trae; si no, usa [fallback].
+  ApiRequestException _responseError(Response response, String fallback) {
+    final data = response.data;
+    final message = data is Map ? data['message'] as String? : null;
+    final code = data is Map ? data['code'] as String? : null;
+    return ApiRequestException(message ?? fallback, code: code);
+  }
+
   //realiza la peticion, comprueba que el usuario existe y guarda los datos localmente
-  Future<bool> login(String username, String password) async {
+  //Devuelve null si inició sesión correctamente, o el mensaje a mostrar. Solo
+  //un 401 del servidor significa usuario o contraseña incorrectos: cualquier
+  //otra falla (servidor caído, túnel apagado, dispositivo no autorizado) se
+  //informa con su propio mensaje.
+  Future<String?> login(String username, String password) async {
+    final Response response;
     try {
-      final response = await _dio.post(
+      // DeviceId y X-Client-Platform los agrega ApiConfig a cada petición.
+      response = await _dio.post(
         ApiRoutes.login,
         data: {
           'username': username,
           'password': password,
         },
+        options: _acceptAnyStatus,
       );
-      final Map<String, dynamic> user = response.data['user'];
+    } on DioException catch (e) {
+      return _networkError(e).message;
+    }
+
+    final data = response.data;
+    final serverMessage = data is Map ? data['message'] as String? : null;
+
+    if (response.statusCode == 200 && data is Map && data['user'] is Map) {
+      final Map<String, dynamic> user = Map<String, dynamic>.from(data['user'] as Map);
       await _storageService.saveData(
         (user['name'] ?? '').toString().trim(),
         (user['item'] ?? '').toString(),
         (user['external_identifier'] ?? '').toString(),
       );
-      return true;
-    } catch (e) {
-      return false;
+      return null;
     }
+
+    // Una respuesta sin JSON no viene del sistema (p. ej. el túnel está
+    // apagado o apunta a otro servidor): no es un problema de credenciales.
+    if (data is! Map) {
+      return 'No se pudo conectar con el servidor. Intenta de nuevo en unos minutos.';
+    }
+    if (response.statusCode == 401) {
+      return serverMessage ?? 'Usuario o contraseña incorrectos.';
+    }
+    return serverMessage ?? 'No se pudo iniciar sesión. Intenta de nuevo.';
+  }
+
+  //Comprueba si la sesión guardada sigue siendo válida en este dispositivo.
+  //true: sesión válida. false: hay que iniciar sesión. Lanza
+  //ApiRequestException si no se pudo comprobar (sin red, servidor caído).
+  Future<bool> hasActiveSession() async {
+    final Response response;
+    try {
+      response = await _dio.get(ApiRoutes.me, options: _acceptAnyStatus);
+    } on DioException catch (e) {
+      throw _networkError(e);
+    }
+    if (response.statusCode == 200 && response.data is Map) return true;
+    if (response.statusCode == 401 || response.statusCode == 403) return false;
+    throw _responseError(response, 'No se pudo comprobar tu sesión. Intenta de nuevo.');
   }
 
   //Cierra la sesion en el servidor y elimina los datos locales
   Future<void> logout() async {
     try {
-      await _dio.post(ApiRoutes.logout, options: _acceptClientErrors);
+      await _dio.post(ApiRoutes.logout, options: _acceptAnyStatus);
     } catch (_) {
       // Aunque falle la red, la sesión local se elimina igualmente
     }
@@ -82,7 +163,7 @@ class ApiService {
   Future<Map<String, dynamic>?> checkData() async {
     final Response response;
     try {
-      response = await _dio.get(ApiRoutes.leaveStatus, options: _acceptClientErrors);
+      response = await _dio.get(ApiRoutes.leaveStatus, options: _acceptAnyStatus);
     } catch (e) {
       return null;
     }
@@ -111,7 +192,9 @@ class ApiService {
   }
 
   //Envia el QR escaneado y devuelve la accion a realizar (mostrar motivos o retorno)
-  Future<Map<String, dynamic>?> userStatus(String qrData) async {
+  //Lanza ApiRequestException con un mensaje claro si el servidor rechaza la
+  //solicitud (QR vencido, sin cupo, etc.) o si falla la red.
+  Future<Map<String, dynamic>> userStatus(String qrData) async {
     // Lanza LocationException si no hay una ubicación confiable.
     final location = await _locationService.capture();
     final Response response;
@@ -119,13 +202,20 @@ class ApiService {
       response = await _dio.post(
         ApiRoutes.qrScan,
         data: {'qrData': qrData, ...location.toJson()},
-        options: _acceptClientErrors,
+        options: _acceptAnyStatus,
       );
-    } catch (e) {
-      return null;
+    } on DioException catch (e) {
+      throw _networkError(e);
     }
     _throwIfUnauthorized(response);
-    return response.data is Map<String, dynamic> ? response.data : null;
+    if (response.data is! Map<String, dynamic>) {
+      throw ApiRequestException('El servidor respondió de forma inesperada. Intenta nuevamente.');
+    }
+    final data = response.data as Map<String, dynamic>;
+    if (response.statusCode != 200 || data['status'] == 1) {
+      throw _responseError(response, 'No se pudo procesar el código QR.');
+    }
+    return data;
   }
 
   //Obtiene las razones de salida de un predio especifico
@@ -134,7 +224,7 @@ class ApiService {
     try {
       response = await _dio.get(
         ApiRoutes.premiseReasons(namePremise),
-        options: _acceptClientErrors,
+        options: _acceptAnyStatus,
       );
     } catch (e) {
       return null;
@@ -144,30 +234,30 @@ class ApiService {
     return List<String>.from(response.data['reasons'] ?? []);
   }
 
-  //Realiza la solicitud de salida del usuario
-  Future<bool> confirmLeave(String namePremise, String nameReason, String qrData) async {
+  //Realiza la solicitud de salida del usuario. [leaveTicket] es el
+  //comprobante que devuelve userStatus() al escanear (no el texto del QR).
+  //Lanza ApiRequestException con el motivo exacto si falla (comprobante
+  //vencido, límite de salidas alcanzado, error de red, etc.).
+  Future<void> confirmLeave(String namePremise, String nameReason, String leaveTicket) async {
     final location = await _locationService.capture();
     final Response response;
     try {
       response = await _dio.post(
         ApiRoutes.leaves,
         data: {
-          'qrData': qrData,
+          'leaveTicket': leaveTicket,
           'namePremise': namePremise,
           'nameReason': nameReason,
           ...location.toJson(),
         },
-        options: _acceptClientErrors,
+        options: _acceptAnyStatus,
       );
-    } catch (e) {
-      return false;
+    } on DioException catch (e) {
+      throw _networkError(e);
     }
     _throwIfUnauthorized(response);
-    if (response.statusCode == 403 &&
-        response.data is Map &&
-        response.data['message'] is String) {
-      throw LocationException(response.data['message'] as String);
+    if (response.statusCode != 200) {
+      throw _responseError(response, 'No se pudo registrar la salida. Intenta nuevamente.');
     }
-    return response.statusCode == 200;
   }
 }

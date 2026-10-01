@@ -5,6 +5,7 @@ import 'login_page.dart';
 import '../../services/api_service.dart';
 import '../../theme/app_colors.dart';
 import '../../theme/app_text_styles.dart';
+import '../../widgets/error_popup.dart';
 import 'scan_page.dart';
 
 class HomePage extends StatefulWidget {
@@ -140,9 +141,7 @@ class _HomePageState extends State<HomePage> {
   void _goToLogin([String? message]) {
     if (!mounted) return;
     if (message != null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(message), backgroundColor: primaryRed),
-      );
+      showErrorPopup(context, message);
     }
     Navigator.pushAndRemoveUntil(
       context,

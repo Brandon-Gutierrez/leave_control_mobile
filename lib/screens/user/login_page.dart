@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../services/api_service.dart';
 import '../../theme/app_colors.dart';
 import '../../theme/app_text_styles.dart';
+import '../../widgets/error_popup.dart';
 import 'home_page.dart';
 
 class LoginPage extends StatefulWidget {
@@ -39,27 +40,24 @@ class _LoginPageState extends State<LoginPage> {
     setState(() {
       _isLoading = true;
     });
-    //realiza la petición a backend y retorna un booleano
-    bool success = await _apiService.login(_usernameController.text.trim(), _passwordController.text,);
+    //realiza la petición a backend; null significa que inició sesión bien
+    final error = await _apiService.login(_usernameController.text.trim(), _passwordController.text,);
     if (!mounted) return;
     //Desactiva el estado de carga
     setState(() {
       _isLoading = false;
     });
     //si la peticion fue exitosa realiza la navegacion a la pantalla de inicio
-    if (success) {
+    if (error == null) {
       Navigator.pushReplacement(
         context,
         MaterialPageRoute(builder: (context) => const HomePage()),
       );
-      //si la peticion no fue exitosa muestra un mensaje de error
+      //si la peticion no fue exitosa muestra el motivo (p. ej. dispositivo
+      //vinculado a otra cuenta) para que el usuario sepa que debe contactar
+      //a Recursos Humanos.
     } else {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Credenciales incorrectas'),
-          backgroundColor: primaryRed,
-        ),
-      );
+      showErrorPopup(context, error);
     }
   }
 

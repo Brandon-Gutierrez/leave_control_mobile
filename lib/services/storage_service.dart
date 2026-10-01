@@ -5,6 +5,7 @@ class StorageService {
   static const _keyToken = 'token';
   static const _keyItem = 'item';
   static const _keyName = 'name';
+  static const _keyDeviceId = 'device_id';
 
   //Guardar data de forma local
   Future<void> saveData (String name,String item, String token) async { 
@@ -39,5 +40,15 @@ class StorageService {
     await _storage.delete(key: _keyToken);
     await _storage.delete(key: _keyItem);
     await _storage.delete(key: _keyName);
+  }
+
+  //Leer el identificador de dispositivo guardado (si ya se generó antes)
+  Future<String?> getDeviceId() async {
+    return await _storage.read(key: _keyDeviceId);
+  }
+
+  //Guardar el identificador de dispositivo generado la primera vez
+  Future<void> saveDeviceId(String deviceId) async {
+    await _storage.write(key: _keyDeviceId, value: deviceId);
   }
 }

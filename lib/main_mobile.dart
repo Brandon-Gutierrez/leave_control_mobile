@@ -1,8 +1,13 @@
 import 'package:flutter/material.dart';
-import 'screens/user/login_page.dart'; // Importa la pantalla creada
+import 'config/api_config.dart';
+import 'screens/user/session_gate.dart';
 
-void main() {
+void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  // Espera a que la cookie de sesión guardada en disco esté cargada antes de
+  // la primera petición; si no, la primera pantalla no vería una sesión que
+  // en realidad sí existe.
+  await ApiConfig().ready;
   runApp(const MyApp());
 }
 
@@ -37,8 +42,7 @@ class MyApp extends StatelessWidget {
           contentTextStyle: TextStyle(fontSize: 15),
         ),
       ),
-      home: const LoginPage(),
-      //home: const LoginScreen(),
+      home: const SessionGate(),
     );
   }
 }

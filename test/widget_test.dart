@@ -33,16 +33,19 @@ class _FakeApiService implements ApiService {
   Future<List<String>?> getReasons(String namePremise) async => reasonsResponse;
 
   @override
-  Future<bool> confirmLeave(String namePremise, String nameReason, String qrData) async => true;
+  Future<void> confirmLeave(String namePremise, String nameReason, String qrData) async {}
 
   @override
-  Future<bool> login(String username, String password) async => true;
+  Future<String?> login(String username, String password) async => null;
 
   @override
   Future<void> logout() async {}
 
   @override
-  Future<Map<String, dynamic>?> userStatus(String qrData) async => null;
+  Future<bool> hasActiveSession() async => true;
+
+  @override
+  Future<Map<String, dynamic>> userStatus(String qrData) async => {};
 }
 
 /// Deja que la Future falsa (instantánea) se resuelva y la UI se actualice.
@@ -120,7 +123,13 @@ void main() {
 
       final api = _FakeApiService(reasonsResponse: ['Trámite bancario', 'Cita médica']);
       await tester.pumpWidget(
-        MaterialApp(home: ReasonPage(qrData: 'Predio Central+uuid', apiService: api)),
+        MaterialApp(
+          home: ReasonPage(
+            qrData: 'Predio Central+uuid',
+            leaveTicket: 'ticket-uuid',
+            apiService: api,
+          ),
+        ),
       );
       await _settle(tester);
 
@@ -186,14 +195,21 @@ class _SlowFakeApiService implements ApiService {
   Future<List<String>?> getReasons(String namePremise) async => null;
 
   @override
-  Future<bool> confirmLeave(String namePremise, String nameReason, String qrData) async => false;
+  Future<void> confirmLeave(String namePremise, String nameReason, String qrData) async {
+    throw ApiRequestException('No se pudo registrar la salida. Intenta nuevamente.');
+  }
 
   @override
-  Future<bool> login(String username, String password) async => false;
+  Future<String?> login(String username, String password) async => 'Credenciales incorrectas';
 
   @override
   Future<void> logout() async {}
 
   @override
-  Future<Map<String, dynamic>?> userStatus(String qrData) async => null;
+  Future<bool> hasActiveSession() async => true;
+
+  @override
+  Future<Map<String, dynamic>> userStatus(String qrData) async {
+    throw ApiRequestException('Código QR inválido o vencido.');
+  }
 }

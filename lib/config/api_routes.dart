@@ -3,6 +3,7 @@ class ApiRoutes {
   // Sesión
   static const String login = '/api/auth/login';
   static const String logout = '/api/auth/logout';
+  static const String me = '/api/auth/me';
 
   // Empleado
   static const String leaveStatus = '/api/me/leave-status';

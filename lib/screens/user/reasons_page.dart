@@ -1,17 +1,36 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../../services/api_service.dart';
 import '../../services/location_service.dart';
 import '../../theme/app_colors.dart';
 import '../../theme/app_text_styles.dart';
+import '../../widgets/error_popup.dart';
 import 'home_page.dart';
 import 'login_page.dart';
 
 class ReasonPage extends StatefulWidget {
   final String qrData;
+
+  /// Comprobante que devolvió el servidor al escanear el QR. Es lo que hay
+  /// que enviar al confirmar el motivo (no el texto del QR original).
+  final String leaveTicket;
+
+  /// Momento en el que el comprobante deja de ser válido. Si es null no se
+  /// muestra cuenta atrás (p. ej. en pruebas).
+  final DateTime? ticketExpiresAt;
+
   /// Permite inyectar un [ApiService] de prueba (p. ej. en tests de widgets).
   final ApiService? apiService;
-  const ReasonPage({super.key, required this.qrData, this.apiService});
+
+  const ReasonPage({
+    super.key,
+    required this.qrData,
+    required this.leaveTicket,
+    this.ticketExpiresAt,
+    this.apiService,
+  });
 
   @override
   State<ReasonPage> createState() => _ReasonPageState();
@@ -28,6 +47,9 @@ class _ReasonPageState extends State<ReasonPage>{
   String? _errorMessage;
   List<String> _reasons = [];
 
+  Timer? _countdownTimer;
+  int? _secondsLeft;
+
   static const primaryRed = AppColors.primaryRed;
   static const darkText = AppColors.darkText;
   static const lightBg = AppColors.lightBg;
@@ -37,6 +59,43 @@ class _ReasonPageState extends State<ReasonPage>{
     super.initState();
     _namePremise = widget.qrData.split('+').first;
     _loadReasons();
+    _startCountdown();
+  }
+
+  @override
+  void dispose() {
+    _countdownTimer?.cancel();
+    super.dispose();
+  }
+
+  /// Cuenta atrás visible: el usuario tiene hasta que el comprobante venza
+  /// para elegir el motivo. Si se acaba el tiempo, vuelve solo al inicio.
+  void _startCountdown() {
+    final expiresAt = widget.ticketExpiresAt;
+    if (expiresAt == null) return;
+
+    void tick() {
+      if (!mounted) return;
+      final remaining = expiresAt.difference(DateTime.now()).inSeconds;
+      setState(() => _secondsLeft = remaining < 0 ? 0 : remaining);
+      if (remaining <= 0) {
+        _countdownTimer?.cancel();
+        _onTicketExpired();
+      }
+    }
+
+    tick();
+    _countdownTimer = Timer.periodic(const Duration(seconds: 1), (_) => tick());
+  }
+
+  void _onTicketExpired() {
+    if (!mounted || _isSubmitting) return;
+    showErrorPopup(context, 'Se acabó el tiempo para elegir el motivo. Vuelva a escanear el QR.');
+    Navigator.pushAndRemoveUntil(
+      context,
+      MaterialPageRoute(builder: (context) => const HomePage()),
+      (route) => false,
+    );
   }
 
   Future<void> _refreshData() => _loadReasons();
@@ -65,9 +124,7 @@ class _ReasonPageState extends State<ReasonPage>{
 
   void _goToLogin(String message) {
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(message), backgroundColor: Colors.red),
-    );
+    showErrorPopup(context, message);
     Navigator.pushAndRemoveUntil(
       context,
       MaterialPageRoute(builder: (context) => const LoginPage()),
@@ -83,29 +140,15 @@ class _ReasonPageState extends State<ReasonPage>{
   });
 
   try {
-    bool result = await _apiService.confirmLeave(
+    await _apiService.confirmLeave(
       _namePremise,
       _selectedReason!,
-      widget.qrData,
+      widget.leaveTicket,
     );
 
     // Verificar si el widget sigue activo en el árbol tras la llamada asíncrona
     if (!mounted) return;
-
-    if (!result) {
-      // Reestablecer estado si falla la confirmación
-      setState(() {
-        _isSubmitting = false;
-      });
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('No se pudo registrar la salida. Intenta nuevamente.'),
-          backgroundColor: Colors.red,
-        ),
-      );
-      return;
-    }
+    _countdownTimer?.cancel();
 
     // Mostrar SnackBar de éxito
     ScaffoldMessenger.of(context).showSnackBar(
@@ -124,14 +167,31 @@ class _ReasonPageState extends State<ReasonPage>{
     );
   } on SessionExpiredException catch (e) {
     _goToLogin(e.message);
+  } on ApiRequestException catch (e) {
+    if (!mounted) return;
+    // El comprobante del escaneo ya no sirve: no tiene sentido dejar al
+    // usuario reintentando con el mismo motivo, hay que volver a escanear.
+    const expiredCodes = {'LEAVE_TICKET_EXPIRED', 'LEAVE_TICKET_INVALID'};
+    if (expiredCodes.contains(e.code)) {
+      _countdownTimer?.cancel();
+      showErrorPopup(context, e.message);
+      Navigator.pushAndRemoveUntil(
+        context,
+        MaterialPageRoute(builder: (context) => const HomePage()),
+        (route) => false,
+      );
+      return;
+    }
+    setState(() {
+      _isSubmitting = false;
+    });
+    showErrorPopup(context, e.message);
   } on LocationException catch (e) {
     if (!mounted) return;
     setState(() {
       _isSubmitting = false;
     });
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(e.message), backgroundColor: Colors.red),
-    );
+    showErrorPopup(context, e.message);
   } catch (e) {
     if (!mounted) return;
 
@@ -139,12 +199,7 @@ class _ReasonPageState extends State<ReasonPage>{
       _isSubmitting = false;
     });
 
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Ocurrió un error inesperado en el servidor.'),
-        backgroundColor: Colors.red,
-      ),
-    );
+    showErrorPopup(context, 'Ocurrió un error inesperado en el servidor.');
   }
 }
 
@@ -168,6 +223,10 @@ class _ReasonPageState extends State<ReasonPage>{
         surfaceTintColor: Colors.transparent,
         elevation: 0,
         iconTheme: const IconThemeData(color: darkText),
+        actions: [
+          if (_secondsLeft != null) _buildCountdownBadge(),
+          const SizedBox(width: 12),
+        ],
       ),
       body: SafeArea(
         bottom: false,
@@ -179,6 +238,37 @@ class _ReasonPageState extends State<ReasonPage>{
         ),
       ),
       bottomNavigationBar: _buildBottomAction(),
+    );
+  }
+
+  Widget _buildCountdownBadge() {
+    final seconds = _secondsLeft ?? 0;
+    final isUrgent = seconds <= 10;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: isUrgent ? primaryRed.withValues(alpha: 0.12) : Colors.grey.shade200,
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            Icons.timer_outlined,
+            size: 16,
+            color: isUrgent ? primaryRed : Colors.grey.shade700,
+          ),
+          const SizedBox(width: 4),
+          Text(
+            '${seconds}s',
+            style: TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.bold,
+              color: isUrgent ? primaryRed : Colors.grey.shade700,
+            ),
+          ),
+        ],
+      ),
     );
   }
 
