@@ -88,7 +88,7 @@ void main() {
       await _settle(tester);
 
       expect(tester.takeException(), isNull);
-      expect(find.text('¡Hola, Juan Pérez!'), findsOneWidget);
+      expect(find.text('Juan Pérez'), findsOneWidget);
       expect(find.text('Registrar mi salida'), findsOneWidget);
 
       await _tearDownTimers(tester);

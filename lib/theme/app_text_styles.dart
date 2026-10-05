@@ -43,7 +43,7 @@ class AppText {
 /// Medidas mínimas para que los botones sean fáciles de tocar.
 class AppDimens {
   static const double buttonHeight = 56.0;
-  static const double cardRadius = 16.0;
-  static const double fieldRadius = 14.0;
+  static const double cardRadius = 8.0;
+  static const double fieldRadius = 8.0;
   static const double iconSize = 26.0;
 }

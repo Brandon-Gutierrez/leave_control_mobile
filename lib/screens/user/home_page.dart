@@ -22,6 +22,11 @@ class _HomePageState extends State<HomePage> {
   late final ApiService _apiService = widget.apiService ?? ApiService();
   String? _name;
   String? _reason;
+  String? _role;
+  String? _jobTitle;
+  String? _photoUrl;
+  String _period = 'day';
+  Map<String, _Stat> _stats = {};
 
   bool _isLeave = false;
   bool _isLoading = true;
@@ -71,6 +76,10 @@ class _HomePageState extends State<HomePage> {
         _isLeave = data['isLeave'] ?? false;
         _dateLeave = data['dateLeave'];
         _reason = data['reason'];
+        _role = _roleLabel(data['role']);
+        _jobTitle = data['job_title']?.toString();
+        _photoUrl = (data['photo_url'] ?? data['photo'] ?? data['avatar'])?.toString();
+        _stats = _parseStats(data['stats']);
       });
       _initTimer();
     } on SessionExpiredException catch (e) {
@@ -80,9 +89,7 @@ class _HomePageState extends State<HomePage> {
 
   void _showSnackBar(String message) {
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(message), backgroundColor: Colors.grey.shade800),
-    );
+    showErrorPopup(context, message);
   }
 
   void _initTimer(){
@@ -108,6 +115,32 @@ class _HomePageState extends State<HomePage> {
         _duration = difference.isNegative ? Duration.zero : difference;
       });
     }
+  }
+
+  // El rol llega del servidor (texto o { name }); se muestra con nombre legible.
+  String? _roleLabel(dynamic role) {
+    final name = (role is Map ? role['name'] : role)?.toString();
+    if (name == null || name.isEmpty) return null;
+    return switch (name.toUpperCase()) {
+      'EMPLOYEE' => 'Empleado',
+      'ADMIN' => 'Administrador',
+      _ => name,
+    };
+  }
+
+  Map<String, _Stat> _parseStats(dynamic raw) {
+    if (raw is! Map) return {};
+    final result = <String, _Stat>{};
+    for (final key in const ['day', 'week', 'month']) {
+      final item = raw[key];
+      if (item is Map) {
+        result[key] = _Stat(
+          (item['exits'] as num?)?.toInt(),
+          (item['minutes'] as num?)?.toInt(),
+        );
+      }
+    }
+    return result;
   }
 
   Future<void> _refreshData() => _loadUserData();
@@ -179,7 +212,7 @@ class _HomePageState extends State<HomePage> {
         elevation: 0,
         actions: [
           IconButton(
-            icon: const Icon(Icons.logout, color: darkText, size: AppDimens.iconSize),
+            icon: const Icon(Icons.logout, color: AppColors.danger, size: AppDimens.iconSize),
             tooltip: 'Cerrar sesión',
             onPressed: _closeSession,
           ),
@@ -277,119 +310,31 @@ class _HomePageState extends State<HomePage> {
   }
 
   Widget _buildContent() {
-    final days = _duration.inDays;
-    final hours = _twoDigits(_duration.inHours.remainder(24));
-    final minutes = _twoDigits(_duration.inMinutes.remainder(60));
-    final seconds = _twoDigits(_duration.inSeconds.remainder(60));
-
     final size = MediaQuery.sizeOf(context);
-    final isSmallPhone = size.width < 360;
-    final horizontalPadding = isSmallPhone ? 16.0 : 24.0;
+    final pad = size.width < 360 ? 16.0 : 20.0;
 
     return SingleChildScrollView(
       physics: const AlwaysScrollableScrollPhysics(),
-      padding: EdgeInsets.symmetric(horizontal: horizontalPadding, vertical: 16.0),
       child: Center(
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 520),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              //LOGO
-              Center(
-                child: Image.asset(
-                  'rsc/comteco.png',
-                  height: isSmallPhone ? 40 : 50,
-                  fit: BoxFit.contain,
-                  errorBuilder: (_, _, _) => const Icon(
-                    Icons.business_rounded,
-                    size: 40,
-                    color: darkText,
-                  ),
-                ),
-              ),
-              const SizedBox(height: 20),
-
-              //SALUDO
-              Text(
-                '¡Hola, ${_name ?? "Usuario"}!',
-                style: TextStyle(
-                  fontSize: isSmallPhone ? 20 : 24,
-                  fontWeight: FontWeight.w800,
-                  color: darkText,
-                  letterSpacing: -0.5,
-                ),
-              ),
-              const SizedBox(height: 20),
-
-              // --- ACCIÓN PRINCIPAL: ESCANEAR (siempre lo primero y más visible) ---
-              _buildScanCta(isSmallPhone),
-
-              // INFORMACIÓN DE ESTADO (SI ESTA CON SALIDA ACTIVA)
-              if (_isLeave) ...[
-                const SizedBox(height: 20),
-                _buildStatusCard(isSmallPhone, days, hours, minutes, seconds),
-              ],
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildScanCta(bool isSmallPhone) {
-    final title = _isLeave ? 'Registrar mi retorno' : 'Registrar mi salida';
-    final subtitle = _isLeave
-        ? 'Escanea el código QR al volver'
-        : 'Escanea el código QR al salir';
-
-    return Material(
-      color: primaryRed,
-      borderRadius: BorderRadius.circular(AppDimens.cardRadius),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(AppDimens.cardRadius),
-        onTap: _goToScan,
-        child: Padding(
-          padding: EdgeInsets.all(isSmallPhone ? 16 : 20),
-          child: Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: Colors.white.withValues(alpha: 0.16),
-                  shape: BoxShape.circle,
-                ),
-                child: const Icon(
-                  Icons.qr_code_scanner_rounded,
-                  color: Colors.white,
-                  size: 30,
-                ),
-              ),
-              const SizedBox(width: 16),
-              Expanded(
+              _buildIdentity(pad),
+              Padding(
+                padding: EdgeInsets.fromLTRB(pad, 18, pad, 24),
                 child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    Text(
-                      title,
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontSize: isSmallPhone ? 17 : 19,
-                        fontWeight: FontWeight.w800,
-                      ),
-                    ),
-                    const SizedBox(height: 3),
-                    Text(
-                      subtitle,
-                      style: TextStyle(
-                        color: Colors.white.withValues(alpha: 0.9),
-                        fontSize: 14,
-                      ),
-                    ),
+                    _buildStatusPanel(),
+                    const SizedBox(height: 14),
+                    _buildScanButton(),
+                    const SizedBox(height: 28),
+                    _buildStats(),
                   ],
                 ),
               ),
-              const Icon(Icons.chevron_right_rounded, color: Colors.white, size: 28),
             ],
           ),
         ),
@@ -397,89 +342,280 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
-  Widget _buildStatusCard(bool isSmallPhone, int days, String hours, String minutes, String seconds) {
+  /// Quién es: foto, nombre y rol real (lo envía el servidor).
+  Widget _buildIdentity(double pad) {
     return Container(
-      padding: EdgeInsets.symmetric(
-        vertical: 20,
-        horizontal: isSmallPhone ? 12 : 16,
+      color: Colors.white,
+      padding: EdgeInsets.fromLTRB(pad, 16, pad, 16),
+      child: Row(
+        children: [
+          _Avatar(photoUrl: _photoUrl),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  _name ?? 'Usuario',
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    fontSize: 21,
+                    fontWeight: FontWeight.w800,
+                    color: darkText,
+                    height: 1.15,
+                  ),
+                ),
+                if (_role != null && _role!.isNotEmpty) ...[
+                  const SizedBox(height: 4),
+                  Row(
+                    children: [
+                      const Icon(Icons.badge_outlined, size: 18, color: AppColors.info),
+                      const SizedBox(width: 6),
+                      Flexible(
+                        child: Text(
+                          _role!,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            fontSize: 15,
+                            fontWeight: FontWeight.w700,
+                            color: AppColors.info,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+                if (_jobTitle != null && _jobTitle!.isNotEmpty) ...[
+                  const SizedBox(height: 2),
+                  Text(
+                    _jobTitle!,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(fontSize: 14, color: Colors.black54),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ],
       ),
+    );
+  }
+
+  /// Estado en un vistazo y por color: verde = adentro, ámbar = fuera.
+  Widget _buildStatusPanel() {
+    final color = _isLeave ? AppColors.warning : AppColors.success;
+    final bg = _isLeave ? AppColors.warningBg : AppColors.successBg;
+    final days = _duration.inDays;
+    final hms =
+        '${_twoDigits(_duration.inHours.remainder(24))}:${_twoDigits(_duration.inMinutes.remainder(60))}:${_twoDigits(_duration.inSeconds.remainder(60))}';
+
+    return Container(
+      padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(AppDimens.cardRadius),
-        border: Border.all(color: Colors.grey.shade300),
+        color: bg,
+        border: Border(left: BorderSide(color: color, width: 8)),
       ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(
+                _isLeave ? Icons.directions_walk_rounded : Icons.check_circle_rounded,
+                color: color,
+                size: 32,
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  _isLeave ? 'Estás fuera' : 'Estás adentro',
+                  style: TextStyle(fontSize: 24, fontWeight: FontWeight.w800, color: color),
+                ),
+              ),
+            ],
+          ),
+          if (_isLeave) ...[
+            const SizedBox(height: 10),
+            Text(
+              _formatLeaveText(_dateLeave),
+              style: const TextStyle(fontSize: 15, color: darkText),
+            ),
+            const SizedBox(height: 10),
+            FittedBox(
+              fit: BoxFit.scaleDown,
+              alignment: Alignment.centerLeft,
+              child: Text(
+                days > 0 ? '$days días $hms' : hms,
+                style: const TextStyle(
+                  fontSize: 40,
+                  fontWeight: FontWeight.w800,
+                  color: darkText,
+                  letterSpacing: 1.5,
+                ),
+              ),
+            ),
+            const Text(
+              'Tiempo transcurrido',
+              style: TextStyle(fontSize: 15, color: Colors.black54),
+            ),
+            if (_reason != null && _reason!.isNotEmpty) ...[
+              const SizedBox(height: 10),
+              Text(
+                'Motivo: $_reason',
+                style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: darkText),
+              ),
+            ],
+          ] else
+            const Padding(
+              padding: EdgeInsets.only(top: 6),
+              child: Text(
+                'Cuando salgas, escanea el código QR del predio.',
+                style: TextStyle(fontSize: 15, color: darkText),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildScanButton() {
+    final title = _isLeave ? 'Registrar mi retorno' : 'Registrar mi salida';
+    return SizedBox(
+      height: 68,
+      child: FilledButton.icon(
+        onPressed: _goToScan,
+        icon: const Icon(Icons.qr_code_scanner_rounded, size: 32),
+        label: Text(title, style: const TextStyle(fontSize: 19, fontWeight: FontWeight.w800)),
+        style: FilledButton.styleFrom(
+          backgroundColor: primaryRed,
+          foregroundColor: Colors.white,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+        ),
+      ),
+    );
+  }
+
+  /// Cuántas veces y cuántos minutos salió: hoy, esta semana o este mes
+  /// (periodos reales del calendario, calculados por el servidor).
+  Widget _buildStats() {
+    final stat = _stats[_period];
+    String show(int? v) => v == null ? '—' : '$v';
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        const Text(
+          'Tus salidas',
+          style: TextStyle(fontSize: 19, fontWeight: FontWeight.w800, color: darkText),
+        ),
+        const SizedBox(height: 10),
+        SegmentedButton<String>(
+          showSelectedIcon: false,
+          segments: const [
+            ButtonSegment(value: 'day', label: Text('Hoy')),
+            ButtonSegment(value: 'week', label: Text('Esta semana')),
+            ButtonSegment(value: 'month', label: Text('Este mes')),
+          ],
+          selected: {_period},
+          onSelectionChanged: (s) => setState(() => _period = s.first),
+          style: SegmentedButton.styleFrom(
+            minimumSize: const Size(0, 48),
+            selectedBackgroundColor: AppColors.infoBg,
+            selectedForegroundColor: AppColors.info,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+          ),
+        ),
+        const SizedBox(height: 12),
+        Container(
+          decoration: const BoxDecoration(
+            color: Colors.white,
+            border: Border.symmetric(horizontal: BorderSide(color: AppColors.line)),
+          ),
+          padding: const EdgeInsets.symmetric(vertical: 16),
+          child: Row(
+            children: [
+              _StatNumber(value: show(stat?.exits), label: 'Salidas', icon: Icons.logout_rounded),
+              Container(width: 1, height: 52, color: AppColors.line),
+              _StatNumber(
+                value: show(stat?.minutes),
+                label: 'Minutos fuera',
+                icon: Icons.timer_outlined,
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _Stat {
+  final int? exits;
+  final int? minutes;
+
+  const _Stat(this.exits, this.minutes);
+}
+
+class _StatNumber extends StatelessWidget {
+  final String value;
+  final String label;
+  final IconData icon;
+
+  const _StatNumber({required this.value, required this.label, required this.icon});
+
+  @override
+  Widget build(BuildContext context) {
+    return Expanded(
       child: Column(
         children: [
           Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              const Icon(
-                Icons.access_time_rounded,
-                color: primaryRed,
-                size: 20,
-              ),
-              const SizedBox(width: 8),
-              Flexible(
-                child: Text(
-                  _formatLeaveText(_dateLeave),
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    fontSize: isSmallPhone ? 14 : 16,
-                    fontWeight: FontWeight.w500,
-                    color: Colors.grey.shade800,
-                  ),
+              Icon(icon, size: 22, color: Colors.black54),
+              const SizedBox(width: 6),
+              Text(
+                value,
+                style: const TextStyle(
+                  fontSize: 32,
+                  fontWeight: FontWeight.w800,
+                  color: AppColors.darkText,
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 12),
-          FittedBox(
-            fit: BoxFit.scaleDown,
-            child: Text(
-              days > 0
-              ? '$days días $hours:$minutes:$seconds'
-              : '$hours:$minutes:$seconds',
-              style: const TextStyle(
-                fontSize: 32,
-                fontWeight: FontWeight.bold,
-                color: darkText,
-                letterSpacing: 1.5,
-              ),
-            ),
-          ),
-          const SizedBox(height: 4),
-          Text(
-            'Tiempo transcurrido',
-            style: TextStyle(
-              fontSize: isSmallPhone ? 14 : 16,
-              color: Colors.grey.shade700,
-            ),
-          ),
-          // MOTIVO DE LA SALIDA
-          if (_reason != null && _reason!.isNotEmpty) ...[
-            const SizedBox(height: 14),
-            Divider(height: 1, color: Colors.grey.shade200),
-            const SizedBox(height: 14),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(Icons.info_outline_rounded, color: Colors.grey.shade600, size: 18),
-                const SizedBox(width: 8),
-                Flexible(
-                  child: Text(
-                    'Motivo: $_reason',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(
-                      fontSize: isSmallPhone ? 14 : 15,
-                      fontWeight: FontWeight.w600,
-                      color: Colors.grey.shade800,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ],
+          const SizedBox(height: 2),
+          Text(label, style: const TextStyle(fontSize: 14, color: Colors.black54)),
         ],
+      ),
+    );
+  }
+}
+
+/// Foto de perfil; si no hay o no carga, una imagen predeterminada.
+class _Avatar extends StatelessWidget {
+  final String? photoUrl;
+
+  const _Avatar({required this.photoUrl});
+
+  @override
+  Widget build(BuildContext context) {
+    const fallback = CircleAvatar(
+      radius: 30,
+      backgroundColor: AppColors.infoBg,
+      child: Icon(Icons.person_rounded, size: 38, color: AppColors.info),
+    );
+    final url = photoUrl;
+    if (url == null || url.isEmpty) return fallback;
+    return ClipOval(
+      child: Image.network(
+        url,
+        width: 60,
+        height: 60,
+        fit: BoxFit.cover,
+        errorBuilder: (_, _, _) => fallback,
+        loadingBuilder: (_, child, progress) => progress == null ? child : fallback,
       ),
     );
   }

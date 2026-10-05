@@ -150,14 +150,7 @@ class _ReasonPageState extends State<ReasonPage>{
     if (!mounted) return;
     _countdownTimer?.cancel();
 
-    // Mostrar SnackBar de éxito
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Salida registrada correctamente'),
-        backgroundColor: Colors.green,
-        duration: Duration(seconds: 2),
-      ),
-    );
+    showSuccessPopup(context, 'Salida registrada correctamente');
 
     // Navegar a HomePage limpiando las pantallas anteriores de la pila
     Navigator.pushAndRemoveUntil(

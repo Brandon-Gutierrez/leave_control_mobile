@@ -2,74 +2,100 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
-/// Muestra un popup de error flotando arriba de la pantalla. Se cierra solo
-/// a los 7 segundos, o antes si el usuario toca la (X). No bloquea la
-/// pantalla como un diálogo modal: el usuario puede seguir interactuando.
-void showErrorPopup(BuildContext context, String message) {
-  final overlay = Overlay.of(context, rootOverlay: true);
+import '../theme/app_colors.dart';
+
+enum PopupKind { success, error }
+
+/// Aviso flotante arriba de la pantalla: verde = salió bien, rojo = algo
+/// falló. Se cierra solo a los 7 segundos o con la (X); no bloquea la pantalla.
+void showAppPopup(BuildContext context, String message, {PopupKind kind = PopupKind.success}) {
+  final overlay = Overlay.maybeOf(context, rootOverlay: true);
+  if (overlay == null) return;
   late OverlayEntry entry;
-  Timer? timer;
 
   void remove() {
-    timer?.cancel();
     if (entry.mounted) entry.remove();
   }
 
   entry = OverlayEntry(
-    builder: (context) => _ErrorPopupCard(message: message, onClose: remove),
+    builder: (_) => _PopupCard(message: message, kind: kind, onClose: remove),
   );
-
   overlay.insert(entry);
-  timer = Timer(const Duration(seconds: 7), remove);
 }
 
-class _ErrorPopupCard extends StatelessWidget {
+void showErrorPopup(BuildContext context, String message) =>
+    showAppPopup(context, message, kind: PopupKind.error);
+
+void showSuccessPopup(BuildContext context, String message) => showAppPopup(context, message);
+
+class _PopupCard extends StatefulWidget {
   final String message;
+  final PopupKind kind;
   final VoidCallback onClose;
 
-  const _ErrorPopupCard({required this.message, required this.onClose});
+  const _PopupCard({required this.message, required this.kind, required this.onClose});
+
+  @override
+  State<_PopupCard> createState() => _PopupCardState();
+}
+
+class _PopupCardState extends State<_PopupCard> {
+  Timer? _timer;
+
+  @override
+  void initState() {
+    super.initState();
+    _timer = Timer(const Duration(seconds: 7), widget.onClose);
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
+    final isError = widget.kind == PopupKind.error;
+    final color = isError ? AppColors.danger : AppColors.success;
     return Positioned(
       top: MediaQuery.of(context).padding.top + 12,
-      left: 16,
-      right: 16,
+      left: 12,
+      right: 12,
       child: Material(
         color: Colors.transparent,
-        child: SafeArea(
-          bottom: false,
-          child: Container(
-            padding: const EdgeInsets.fromLTRB(16, 12, 8, 12),
-            decoration: BoxDecoration(
-              color: const Color(0xFFD32F2F),
-              borderRadius: BorderRadius.circular(12),
-              boxShadow: const [
-                BoxShadow(color: Colors.black26, blurRadius: 10, offset: Offset(0, 4)),
-              ],
-            ),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Padding(
-                  padding: EdgeInsets.only(top: 2),
-                  child: Icon(Icons.error_outline_rounded, color: Colors.white, size: 20),
+        child: Container(
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(6),
+            border: Border(left: BorderSide(color: color, width: 8)),
+            boxShadow: const [BoxShadow(color: Colors.black26, blurRadius: 12, offset: Offset(0, 4))],
+          ),
+          padding: const EdgeInsets.fromLTRB(14, 12, 4, 12),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Icon(isError ? Icons.error_rounded : Icons.check_circle_rounded, color: color, size: 30),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      isError ? 'Algo salió mal' : 'Listo',
+                      style: TextStyle(color: color, fontWeight: FontWeight.w800, fontSize: 16),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(widget.message, style: const TextStyle(fontSize: 15, color: AppColors.darkText)),
+                  ],
                 ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Text(
-                    message,
-                    style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w600),
-                  ),
-                ),
-                IconButton(
-                  icon: const Icon(Icons.close_rounded, color: Colors.white, size: 20),
-                  padding: EdgeInsets.zero,
-                  constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
-                  onPressed: onClose,
-                ),
-              ],
-            ),
+              ),
+              IconButton(
+                tooltip: 'Cerrar',
+                icon: const Icon(Icons.close_rounded, size: 22),
+                onPressed: widget.onClose,
+              ),
+            ],
           ),
         ),
       ),

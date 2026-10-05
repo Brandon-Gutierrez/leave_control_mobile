@@ -61,13 +61,7 @@ class _ScanPageState extends State<ScanPage> {
 
       final String message = response['message'] ?? 'Acción completada.';
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(message),
-          backgroundColor: Colors.green,
-          duration: const Duration(seconds: 2),
-        ),
-      );
+      showSuccessPopup(context, message);
 
       if (response['action'] == 'showReasons') {
         // El servidor devuelve un comprobante (leaveTicket) distinto del QR
