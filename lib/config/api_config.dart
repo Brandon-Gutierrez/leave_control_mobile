@@ -58,8 +58,30 @@ class ApiConfig {
       ),
     );
 
+    // Las cookies se gestionan siempre, pero esperando a que el disco esté
+    // leído: si la primera petición (el login) saliera antes, la cookie de
+    // sesión no se guardaría y la primera pantalla fallaría con 401.
+    dio.interceptors.add(
+      InterceptorsWrapper(
+        onRequest: (options, handler) async {
+          await ready;
+          _cookieManager!.onRequest(options, handler);
+        },
+        onResponse: (response, handler) async {
+          await ready;
+          _cookieManager!.onResponse(response, handler);
+        },
+        onError: (error, handler) async {
+          await ready;
+          _cookieManager!.onError(error, handler);
+        },
+      ),
+    );
+
     ready = _initCookieJar();
   }
+
+  CookieManager? _cookieManager;
 
   Future<void> _initCookieJar() async {
     final dir = await getApplicationDocumentsDirectory();
@@ -68,7 +90,7 @@ class ApiConfig {
       storage: FileStorage('${dir.path}/.cookies/'),
     );
     _cookieJar = cookieJar;
-    dio.interceptors.add(CookieManager(cookieJar));
+    _cookieManager = CookieManager(cookieJar);
   }
 
   /// Elimina la cookie de sesión guardada.
