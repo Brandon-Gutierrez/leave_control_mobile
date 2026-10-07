@@ -1,12 +1,14 @@
 import 'dart:async';
 
+import 'package:control_input_output/core/network/api_exceptions.dart';
+import 'package:control_input_output/features/auth/presentation/login_page.dart';
+import 'package:control_input_output/features/leave/data/leave_service.dart';
+import 'package:control_input_output/features/leave/models/leave_status.dart';
+import 'package:control_input_output/features/leave/models/qr_scan_result.dart';
+import 'package:control_input_output/features/leave/presentation/home_page.dart';
+import 'package:control_input_output/features/leave/presentation/reasons_page.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-
-import 'package:control_input_output/screens/user/home_page.dart';
-import 'package:control_input_output/screens/user/login_page.dart';
-import 'package:control_input_output/screens/user/reasons_page.dart';
-import 'package:control_input_output/services/api_service.dart';
 
 /// Tamaños lógicos de teléfonos comunes (ancho x alto).
 const _phoneSizes = <String, Size>{
@@ -18,16 +20,18 @@ const _phoneSizes = <String, Size>{
   'Horizontal': Size(800, 360),
 };
 
-/// [ApiService] de prueba: no toca la red ni el almacenamiento seguro,
+/// [LeaveService] de prueba: no toca la red ni el almacenamiento seguro,
 /// así las pantallas se pueden probar de forma instantánea y determinista.
-class _FakeApiService implements ApiService {
+class _FakeLeaveService implements LeaveService {
   Map<String, dynamic>? leaveStatusResponse;
   List<String>? reasonsResponse;
 
-  _FakeApiService({this.leaveStatusResponse, this.reasonsResponse});
+  _FakeLeaveService({this.leaveStatusResponse, this.reasonsResponse});
 
   @override
-  Future<Map<String, dynamic>?> checkData() async => leaveStatusResponse;
+  Future<LeaveStatus?> fetchLeaveStatus() async => leaveStatusResponse == null
+      ? null
+      : LeaveStatus.fromJson(leaveStatusResponse!);
 
   @override
   Future<List<String>?> getReasons(String namePremise) async => reasonsResponse;
@@ -36,16 +40,8 @@ class _FakeApiService implements ApiService {
   Future<void> confirmLeave(String namePremise, String nameReason, String qrData) async {}
 
   @override
-  Future<String?> login(String username, String password) async => null;
-
-  @override
-  Future<void> logout() async {}
-
-  @override
-  Future<bool> hasActiveSession() async => true;
-
-  @override
-  Future<Map<String, dynamic>> userStatus(String qrData) async => {};
+  Future<QrScanResult> scanQr(String qrData) async =>
+      const QrScanResult(message: '', action: null, leaveTicket: null, leaveTicketExpiresAt: null);
 }
 
 /// Deja que la Future falsa (instantánea) se resuelva y la UI se actualice.
@@ -83,8 +79,8 @@ void main() {
       tester.view.devicePixelRatio = 1.0;
       addTearDown(tester.view.reset);
 
-      final api = _FakeApiService(leaveStatusResponse: {'name': 'Juan Pérez', 'isLeave': false});
-      await tester.pumpWidget(MaterialApp(home: HomePage(apiService: api)));
+      final api = _FakeLeaveService(leaveStatusResponse: {'name': 'Juan Pérez', 'isLeave': false});
+      await tester.pumpWidget(MaterialApp(home: HomePage(leaveService: api)));
       await _settle(tester);
 
       expect(tester.takeException(), isNull);
@@ -99,13 +95,13 @@ void main() {
       tester.view.devicePixelRatio = 1.0;
       addTearDown(tester.view.reset);
 
-      final api = _FakeApiService(leaveStatusResponse: {
+      final api = _FakeLeaveService(leaveStatusResponse: {
         'name': 'Juan Pérez',
         'isLeave': true,
         'dateLeave': DateTime.now().subtract(const Duration(minutes: 5)).toIso8601String(),
         'reason': 'Trámite bancario',
       });
-      await tester.pumpWidget(MaterialApp(home: HomePage(apiService: api)));
+      await tester.pumpWidget(MaterialApp(home: HomePage(leaveService: api)));
       await _settle(tester);
 
       expect(tester.takeException(), isNull);
@@ -116,18 +112,18 @@ void main() {
       await _tearDownTimers(tester);
     });
 
-    testWidgets('ReasonPage no desborda en ${entry.key}', (tester) async {
+    testWidgets('ReasonsPage no desborda en ${entry.key}', (tester) async {
       tester.view.physicalSize = entry.value;
       tester.view.devicePixelRatio = 1.0;
       addTearDown(tester.view.reset);
 
-      final api = _FakeApiService(reasonsResponse: ['Trámite bancario', 'Cita médica']);
+      final api = _FakeLeaveService(reasonsResponse: ['Trámite bancario', 'Cita médica']);
       await tester.pumpWidget(
         MaterialApp(
-          home: ReasonPage(
+          home: ReasonsPage(
             qrData: 'Predio Central+uuid',
             leaveTicket: 'ticket-uuid',
-            apiService: api,
+            leaveService: api,
           ),
         ),
       );
@@ -143,10 +139,10 @@ void main() {
 
   testWidgets('HomePage nunca muestra una pantalla en blanco mientras carga', (tester) async {
     // Nunca se resuelve hasta que el test lo decida: simula la espera de la red.
-    final neverCompletes = Completer<Map<String, dynamic>?>();
-    final slowApi = _SlowFakeApiService(neverCompletes.future);
+    final neverCompletes = Completer<LeaveStatus?>();
+    final slowApi = _SlowFakeLeaveService(neverCompletes.future);
 
-    await tester.pumpWidget(MaterialApp(home: HomePage(apiService: slowApi)));
+    await tester.pumpWidget(MaterialApp(home: HomePage(leaveService: slowApi)));
     // Un solo pump: se inspecciona el primer frame, antes de que la petición
     // (que nunca termina) pueda resolverse.
     await tester.pump();
@@ -155,15 +151,15 @@ void main() {
     expect(find.byType(CircularProgressIndicator), findsOneWidget);
     expect(find.text('Cargando tu información...'), findsOneWidget);
 
-    neverCompletes.complete({'name': 'Juan Pérez', 'isLeave': false});
+    neverCompletes.complete(LeaveStatus.fromJson({'name': 'Juan Pérez', 'isLeave': false}));
     await _settle(tester);
     await _tearDownTimers(tester);
   });
 
   testWidgets('HomePage muestra un mensaje claro y reintentar si falla la carga', (tester) async {
-    final api = _FakeApiService(leaveStatusResponse: null); // fuerza el error simulado
+    final api = _FakeLeaveService(leaveStatusResponse: null); // fuerza el error simulado
 
-    await tester.pumpWidget(MaterialApp(home: HomePage(apiService: api)));
+    await tester.pumpWidget(MaterialApp(home: HomePage(leaveService: api)));
     await _settle(tester);
 
     expect(tester.takeException(), isNull);
@@ -182,14 +178,14 @@ void main() {
   });
 }
 
-/// [ApiService] falso cuya respuesta se resuelve solo cuando el test lo pide
+/// [LeaveService] falso cuya respuesta se resuelve solo cuando el test lo pide
 /// explícitamente, para poder inspeccionar el estado de carga intermedio.
-class _SlowFakeApiService implements ApiService {
-  final Future<Map<String, dynamic>?> _pending;
-  _SlowFakeApiService(this._pending);
+class _SlowFakeLeaveService implements LeaveService {
+  final Future<LeaveStatus?> _pending;
+  _SlowFakeLeaveService(this._pending);
 
   @override
-  Future<Map<String, dynamic>?> checkData() => _pending;
+  Future<LeaveStatus?> fetchLeaveStatus() => _pending;
 
   @override
   Future<List<String>?> getReasons(String namePremise) async => null;
@@ -200,16 +196,7 @@ class _SlowFakeApiService implements ApiService {
   }
 
   @override
-  Future<String?> login(String username, String password) async => 'Credenciales incorrectas';
-
-  @override
-  Future<void> logout() async {}
-
-  @override
-  Future<bool> hasActiveSession() async => true;
-
-  @override
-  Future<Map<String, dynamic>> userStatus(String qrData) async {
+  Future<QrScanResult> scanQr(String qrData) async {
     throw ApiRequestException('Código QR inválido o vencido.');
   }
 }

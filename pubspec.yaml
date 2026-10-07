@@ -1,19 +1,17 @@
 name: control_input_output
-description: "A new Flutter project."
-
-publish_to: 'none' # Remove this line if you wish to publish to pub.dev
-
+description: "App móvil de registro de salidas temporales y retornos del personal mediante QR."
+# Aplicación privada: no se publica en pub.dev.
+publish_to: 'none'
 
 version: 1.0.0+1
 
 environment:
   sdk: ^3.13.0
 
-
 dependencies:
   flutter:
     sdk: flutter
-  cupertino_icons: ^1.0.8
+
   dio: ^5.0.0
   cookie_jar: ^4.0.0
   dio_cookie_manager: ^3.0.0
@@ -22,6 +20,7 @@ dependencies:
   geolocator: ^14.0.2
   connectivity_plus: ^7.3.1
   path_provider: ^2.0.0
+
 dev_dependencies:
   flutter_test:
     sdk: flutter

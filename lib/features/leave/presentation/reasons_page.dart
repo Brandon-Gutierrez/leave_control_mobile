@@ -2,15 +2,16 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
-import '../../services/api_service.dart';
-import '../../services/location_service.dart';
-import '../../theme/app_colors.dart';
-import '../../theme/app_text_styles.dart';
-import '../../widgets/error_popup.dart';
+import '../../../core/location/location_service.dart';
+import '../../../core/network/api_exceptions.dart';
+import '../../../core/theme/app_colors.dart';
+import '../../../core/theme/app_text_styles.dart';
+import '../../../core/widgets/app_popup.dart';
+import '../../auth/presentation/login_page.dart';
+import '../data/leave_service.dart';
 import 'home_page.dart';
-import 'login_page.dart';
 
-class ReasonPage extends StatefulWidget {
+class ReasonsPage extends StatefulWidget {
   final String qrData;
 
   /// Comprobante que devolvió el servidor al escanear el QR. Es lo que hay
@@ -21,24 +22,24 @@ class ReasonPage extends StatefulWidget {
   /// muestra cuenta atrás (p. ej. en pruebas).
   final DateTime? ticketExpiresAt;
 
-  /// Permite inyectar un [ApiService] de prueba (p. ej. en tests de widgets).
-  final ApiService? apiService;
+  /// Permite inyectar un [LeaveService] de prueba (p. ej. en tests de widgets).
+  final LeaveService? leaveService;
 
-  const ReasonPage({
+  const ReasonsPage({
     super.key,
     required this.qrData,
     required this.leaveTicket,
     this.ticketExpiresAt,
-    this.apiService,
+    this.leaveService,
   });
 
   @override
-  State<ReasonPage> createState() => _ReasonPageState();
+  State<ReasonsPage> createState() => _ReasonsPageState();
 }
 
-class _ReasonPageState extends State<ReasonPage>{
+class _ReasonsPageState extends State<ReasonsPage>{
 
-  late final ApiService _apiService = widget.apiService ?? ApiService();
+  late final LeaveService _leaveService = widget.leaveService ?? LeaveService();
 
   String _namePremise = '';
   String? _selectedReason;
@@ -107,7 +108,7 @@ class _ReasonPageState extends State<ReasonPage>{
     });
 
     try{
-      final data = await _apiService.getReasons(_namePremise);
+      final data = await _leaveService.getReasons(_namePremise);
       if (!mounted) return;
       setState((){
         if (data == null) {
@@ -140,7 +141,7 @@ class _ReasonPageState extends State<ReasonPage>{
   });
 
   try {
-    await _apiService.confirmLeave(
+    await _leaveService.confirmLeave(
       _namePremise,
       _selectedReason!,
       widget.leaveTicket,

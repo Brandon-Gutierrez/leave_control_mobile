@@ -1,22 +1,18 @@
-import 'package:dio/dio.dart';
+import 'dart:async';
+
 import 'package:cookie_jar/cookie_jar.dart';
+import 'package:dio/dio.dart';
 import 'package:dio_cookie_manager/dio_cookie_manager.dart';
 import 'package:path_provider/path_provider.dart';
 
-import '../services/device_service.dart';
+import '../config/api_config.dart';
+import '../storage/device_service.dart';
 
 /// Cliente HTTP único de la app. Guarda la cookie de sesión de Laravel en
 /// disco (no solo en memoria): si no se persiste, cada reinicio de la app
 /// pierde la cookie y obliga a iniciar sesión de nuevo aunque el usuario no
 /// haya cerrado sesión.
-class ApiConfig {
-  /// URL del backend. Se puede sobrescribir al compilar:
-  /// flutter run -t lib/main_mobile.dart --dart-define=API_BASE_URL=https://mi-api
-  static const String baseUrl = String.fromEnvironment(
-    'API_BASE_URL',
-    defaultValue: 'https://duckie-carposporic-nickolas.ngrok-free.dev',
-  );
-
+class ApiClient {
   late final Dio dio;
 
   /// Se resuelve cuando la cookie de sesión guardada en disco ya está
@@ -25,16 +21,17 @@ class ApiConfig {
   late final Future<void> ready;
 
   PersistCookieJar? _cookieJar;
+  CookieManager? _cookieManager;
   final DeviceService _deviceService = DeviceService();
 
-  static final ApiConfig _instance = ApiConfig._internal();
+  static final ApiClient _instance = ApiClient._internal();
 
-  factory ApiConfig() => _instance;
+  factory ApiClient() => _instance;
 
-  ApiConfig._internal() {
+  ApiClient._internal() {
     dio = Dio(
       BaseOptions(
-        baseUrl: baseUrl,
+        baseUrl: ApiConfig.baseUrl,
         connectTimeout: const Duration(seconds: 15),
         receiveTimeout: const Duration(seconds: 30),
         headers: {
@@ -65,23 +62,21 @@ class ApiConfig {
       InterceptorsWrapper(
         onRequest: (options, handler) async {
           await ready;
-          _cookieManager!.onRequest(options, handler);
+          unawaited(_cookieManager!.onRequest(options, handler));
         },
         onResponse: (response, handler) async {
           await ready;
-          _cookieManager!.onResponse(response, handler);
+          unawaited(_cookieManager!.onResponse(response, handler));
         },
         onError: (error, handler) async {
           await ready;
-          _cookieManager!.onError(error, handler);
+          unawaited(_cookieManager!.onError(error, handler));
         },
       ),
     );
 
     ready = _initCookieJar();
   }
-
-  CookieManager? _cookieManager;
 
   Future<void> _initCookieJar() async {
     final dir = await getApplicationDocumentsDirectory();

@@ -1,7 +1,8 @@
 import 'dart:io';
 
-import 'package:control_input_output/config/api_config.dart';
-import 'package:control_input_output/services/api_service.dart';
+import 'package:control_input_output/core/network/api_client.dart';
+import 'package:control_input_output/core/network/api_exceptions.dart';
+import 'package:control_input_output/features/auth/data/auth_service.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
@@ -39,7 +40,7 @@ class _FakeAdapter implements HttpClientAdapter {
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  late ApiService api;
+  late AuthService api;
 
   setUpAll(() {
     // En pruebas no hay plugin nativo: la cookie de sesión se guarda en temp.
@@ -53,12 +54,12 @@ void main() {
 
   setUp(() {
     FlutterSecureStorage.setMockInitialValues({});
-    api = ApiService();
+    api = AuthService();
   });
 
   _FakeAdapter respond(int status, String body, {String contentType = 'application/json'}) {
     final adapter = _FakeAdapter(status, body, contentType: contentType);
-    ApiConfig().dio.httpClientAdapter = adapter;
+    ApiClient().dio.httpClientAdapter = adapter;
     return adapter;
   }
 

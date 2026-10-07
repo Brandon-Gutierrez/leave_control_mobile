@@ -8,45 +8,81 @@ Aplicación móvil para registrar salidas temporales y retornos de empleados. Au
 
 ### Recorrido principal
 
-1. `lib/main_mobile.dart` inicializa Flutter y espera a que `ApiConfig` cargue las cookies persistidas.
-2. `lib/screens/user/session_gate.dart` consulta la sesión con `ApiService.hasActiveSession()`. Si el backend confirma la sesión abre Inicio; si la rechaza abre Login. Un error de red permite reintentar.
-3. `lib/screens/user/login_page.dart` valida las credenciales de formulario y delega el login a `ApiService`.
-4. `lib/screens/user/home_page.dart` carga el estado laboral, presenta la acción QR para salida/retorno y mantiene el contador de una salida activa.
-5. `lib/screens/user/scan_page.dart` lee un QR con `mobile_scanner`. `ApiService.userStatus()` captura ubicación mediante `LocationService`, envía la operación y devuelve la siguiente acción.
-6. Si la API requiere un motivo, `lib/screens/user/reasons_page.dart` carga los motivos y envía el comprobante temporal de salida junto a la selección y otra prueba de ubicación.
-7. `lib/services/storage_service.dart` persiste datos locales sensibles mediante almacenamiento seguro. `ApiConfig` persiste por separado las cookies de sesión.
+1. `lib/main.dart` inicializa Flutter y espera a que `ApiClient` cargue las cookies persistidas.
+2. `features/auth/presentation/session_gate.dart` consulta la sesión con `AuthService.hasActiveSession()`. Si el backend confirma la sesión abre Inicio; si la rechaza abre Login. Un error de red permite reintentar.
+3. `features/auth/presentation/login_page.dart` valida las credenciales de formulario y delega el login a `AuthService`.
+4. `features/leave/presentation/home_page.dart` carga el estado laboral (`LeaveService.fetchLeaveStatus()` → `LeaveStatus`), presenta la acción QR para salida/retorno y mantiene el contador de una salida activa.
+5. `features/leave/presentation/scan_page.dart` lee un QR con `mobile_scanner`. `LeaveService.scanQr()` captura la ubicación mediante `LocationService`, envía la operación y devuelve un `QrScanResult` con la siguiente acción.
+6. Si la API requiere un motivo, `features/leave/presentation/reasons_page.dart` carga los motivos y envía el comprobante temporal de salida junto a la selección y otra prueba de ubicación (`LeaveService.confirmLeave()`).
+7. `core/storage/storage_service.dart` persiste datos locales sensibles mediante almacenamiento seguro. `ApiClient` persiste por separado las cookies de sesión.
 
-Relación actual resumida: las pantallas llaman directamente a `ApiService`; este combina solicitudes HTTP, traducción de errores y algunas reglas de flujo; `ApiConfig` comparte Dio, cookies y encabezados; servicios especializados encapsulan almacenamiento, dispositivo y ubicación.
+Relación actual resumida: las pantallas llaman a `AuthService` / `LeaveService`; ambos usan `ApiClient` (Dio + cookies + encabezados) y `ApiResponses` (interpretación de respuestas y errores); servicios especializados encapsulan almacenamiento, dispositivo y ubicación.
 
 ## 2. Código Dart
 
+### Estructura
+
+```text
+lib/
+├── main.dart
+├── app/app.dart
+├── core/
+│   ├── config/{api_config,api_routes}.dart
+│   ├── network/{api_client,api_exceptions,api_responses}.dart
+│   ├── storage/{storage_service,device_service}.dart
+│   ├── location/location_service.dart
+│   ├── theme/{app_colors,app_text_styles,app_theme}.dart
+│   └── widgets/app_popup.dart
+└── features/
+    ├── auth/{data/auth_service.dart, presentation/{login_page,session_gate}.dart}
+    └── leave/
+        ├── data/leave_service.dart
+        ├── models/{leave_status,qr_scan_result}.dart
+        └── presentation/{home_page,scan_page,reasons_page}.dart
+```
+
+### `core/`
+
 | Archivo | Función y relaciones | Mejora de Clean Code / arquitectura |
 |---|---|---|
-| `lib/main_mobile.dart` | Punto de entrada de esta aplicación (`-t lib/main_mobile.dart`); configura `MaterialApp`, tema, sesión inicial y espera de cookies. | Mantener el arranque pequeño. Mover la composición de dependencias a un `AppBootstrap`/contenedor y construir el tema en un archivo propio; evitar que el widget raíz conozca inicialización de infraestructura. |
-| `lib/config/api_config.dart` | Singleton del cliente Dio. Configura URL, timeouts, encabezados, `DeviceId`, cookie persistente y limpieza de sesión. Usa `DeviceService` y `path_provider`. | Separar configuración inmutable (`ApiEnvironment`), creación de Dio, almacenamiento de cookies e interceptor. Inyectar cliente/dependencias; exigir HTTPS y una URL de release validada. Revisar `ignoreExpires: true` con el contrato de sesión del backend: el servidor debe seguir siendo autoridad y una cookie expirada no debería prolongarse accidentalmente. |
-| `lib/config/api_routes.dart` | Constantes de rutas del backend y construcción codificada de la ruta de razones por predio. Consumido por `ApiService`. | Centralizar rutas junto a contratos/API por feature cuando crezca el cliente; tipar parámetros/response en vez de acoplar strings a widgets. |
-| `lib/models/auth_user.dart` | Archivo existente, actualmente vacío; no participa en el flujo. | Implementar un modelo de usuario solo cuando exista un contrato estable (`fromJson`, tipos y validación) o eliminarlo para no prometer una abstracción que no se usa. |
-| `lib/services/api_service.dart` | Fachada usada por las pantallas para login, sesión, estado, escaneo y confirmación. Traduce respuestas Dio a errores y coordina `LocationService`, `StorageService`, `ApiConfig` y rutas. | Es el principal candidato a dividir por responsabilidad: repositorios de autenticación/salidas, DTOs y casos de uso. Evitar `Map<String, dynamic>` y retornos ambiguos `null`/`String?`; modelar estados/errores tipados. Distinguir fallos de red, HTTP y parseo en todos los métodos, no ocultarlos con `catch` genérico. Inyectar interfaces en vez de crear servicios internamente. |
-| `lib/services/device_service.dart` | Lee o genera un identificador aleatorio persistente y lo entrega al encabezado que agrega `ApiConfig`. | Definir contrato y ciclo de vida con backend (reinstalación, cambio de dispositivo, revocación); probar generación/estabilidad usando un almacenamiento inyectado. Tratar el ID como identificador, no como secreto de autenticación. |
-| `lib/services/location_service.dart` | Comprueba permisos/GPS/VPN, captura coordenadas y marca ubicación simulada. `LocationProof.toJson()` define el payload enviado en escaneo y confirmación. | Mantener separado el acceso a plugins de la política de negocio: interfaz de proveedor de ubicación/conectividad, errores tipados y tests de permisos/timeout. Validar límites de frescura/precisión también en backend; la señal del cliente no es una garantía ant fraude. |
-| `lib/services/storage_service.dart` | Persiste nombre, item, token e identificador del dispositivo usando `FlutterSecureStorage`; lo usan `ApiService` y `DeviceService`. | Inyectar una abstracción de almacenamiento, documentar qué datos son necesarios y su retención, y probar lectura/escritura/borrado. Revisar si guardar `token` es necesario cuando la autenticación efectiva se hace mediante cookie. Evitar secuencias de escrituras parcialmente aplicadas o definir su recuperación. |
-| `lib/screens/user/session_gate.dart` | Estado inicial que valida la sesión remota y enruta a Login o Inicio. Expone inyección opcional de `ApiService`. | Llevar decisión de sesión al estado de autenticación/router; modelar explícitamente loading, sesión inválida y error de red. La opción de inyección es buen inicio, pero debe aplicarse de manera consistente a las demás pantallas. |
-| `lib/screens/user/login_page.dart` | Formulario de credenciales, validación, visibilidad de contraseña, indicador de carga y navegación tras login. Utiliza `ApiService`, tema y popup de error. | Mantener UI declarativa y mover estado/acción de login a un controlador/notifier; no mezclar navegación, validación de backend y presentación en el mismo `State`. Cubrir validación, loading, errores y éxito con widget tests. |
-| `lib/screens/user/home_page.dart` | Consulta y presenta identidad/estado de salida, actualización manual, tiempo transcurrido, logout y acceso al escáner. Utiliza `ApiService`, `Timer`, `ScanPage` y tema. | Separar el estado de pantalla y el cálculo/formato de duración; parsear fechas de forma segura en el límite de datos. Controlar concurrencia de refresh y logout y presentar estados tipados. Extraer componentes visuales solo si se reutilizan o reducen complejidad. |
-| `lib/screens/user/scan_page.dart` | Maneja el ciclo de cámara, lectura QR, linterna/cámara, progreso, errores y navegación a motivos/Inicio/Login. Depende de `mobile_scanner`, `ApiService` y `LocationService` (excepciones). | Separar el controlador de cámara del flujo de negocio; definir estados explícitos, evitar reiniciar cámara después de desmontar y probar duplicados/errores/permisos. El QR y el comprobante son datos distintos: conservar ese contrato tipado. |
-| `lib/screens/user/reasons_page.dart` | Extrae el predio del QR, obtiene motivos, selecciona uno, cuenta atrás del comprobante y confirma con ubicación. Navega según éxito, expiración o sesión caducada. | Separar parsing del QR/ticket, temporizador y coordinación API en un controlador/caso de uso. Usar DTO tipado para ticket/expiración y errores; cubrir carrera entre expiración y envío, refresh, selección y confirmación. |
-| `lib/theme/app_colors.dart` | Tokens de color compartidos por pantallas y estilos. | Completar el sistema mediante `ThemeData`/`ColorScheme`, estados semánticos y soporte de tema oscuro/accesibilidad; evitar colores duplicados en pantallas. |
-| `lib/theme/app_text_styles.dart` | Estilos `AppText` y medidas `AppDimens`; empleado en las pantallas. | Unificar tipografía/medidas en el tema Flutter para heredar escalado y accesibilidad; `caption` puede ser `const` si no necesita color calculado. Evitar valores visuales repetidos fuera de los tokens. |
-| `lib/widgets/error_popup.dart` | Popup superpuesto no modal con autocierre de siete segundos y botón de cierre; llamado desde los flujos de UI. | Considerar `ScaffoldMessenger` o un sistema de notificaciones central con semántica accesible. Garantizar ciclo de vida del `OverlayEntry` y evitar duplicados; añadir tests para autocierre y cierre manual. |
+| `config/api_config.dart` | `ApiConfig.baseUrl`: URL del backend (`--dart-define=API_BASE_URL`). | Validar HTTPS y una URL de release por entorno. |
+| `config/api_routes.dart` | Rutas del backend y la ruta codificada de motivos por predio. | Agrupar por feature si el cliente crece. |
+| `network/api_client.dart` | Singleton `ApiClient` con Dio: URL, timeouts, encabezados, `DeviceId` en cada petición, cookie persistente y limpieza de sesión. Usa `DeviceService` y `path_provider`. | Inyectar el cliente en los servicios; revisar `ignoreExpires: true` con el contrato de sesión del backend (el servidor debe seguir siendo la autoridad). |
+| `network/api_exceptions.dart` | `SessionExpiredException` (401) y `ApiRequestException` (red o respuesta de error con mensaje y código del backend). | — |
+| `network/api_responses.dart` | `ApiResponses`: acepta cualquier estado HTTP, lanza `SessionExpiredException` ante 401 y convierte fallos de red/respuestas de error en mensajes claros. | — |
+| `storage/storage_service.dart` | Persiste nombre, item, token e identificador del dispositivo con `FlutterSecureStorage`. | Inyectar una abstracción de almacenamiento; revisar si guardar `token` es necesario cuando la autenticación efectiva usa cookie. |
+| `storage/device_service.dart` | Genera una sola vez un identificador aleatorio y lo guarda; `ApiClient` lo envía como `DeviceId`. | Definir el ciclo de vida con el backend (reinstalación, revocación). |
+| `location/location_service.dart` | `LocationService` comprueba permisos/GPS/VPN y captura la posición; `LocationProof.toJson()` es el payload que valida el servidor; `LocationException` explica el fallo. | Mantener la política de negocio separada del acceso a plugins (proveedores inyectables). |
+| `theme/` | `AppColors`, `AppText`, `AppDimens` y `buildAppTheme()`. | Integrar los tokens en `ThemeData`/`ColorScheme`. |
+| `widgets/app_popup.dart` | Aviso flotante no modal (éxito/error) con autocierre de 7 s. | Evaluar `ScaffoldMessenger`. |
+
+### `features/auth/`
+
+| Archivo | Función y relaciones |
+|---|---|
+| `data/auth_service.dart` | `AuthService`: `login()` (devuelve `null` si entró o el mensaje a mostrar), `hasActiveSession()` y `logout()` (cierra en el servidor y borra datos locales). |
+| `presentation/session_gate.dart` | Arranque: comprueba la sesión y enruta a Login o Inicio; permite inyectar `AuthService`. |
+| `presentation/login_page.dart` | Formulario de credenciales, validación, indicador de carga y navegación tras el login. |
+
+### `features/leave/`
+
+| Archivo | Función y relaciones |
+|---|---|
+| `data/leave_service.dart` | `LeaveService`: `fetchLeaveStatus()`, `scanQr()`, `getReasons()` y `confirmLeave()`. Captura la ubicación y traduce errores con `ApiResponses`. |
+| `models/leave_status.dart` | `LeaveStatus` (persona, si está fuera, motivo, rol, foto, estadísticas) y `LeaveStat`. |
+| `models/qr_scan_result.dart` | `QrScanResult`: mensaje, acción (`showReasons`/`showHome`) y comprobante de la salida. |
+| `presentation/home_page.dart` | Identidad, estado de salida, contador de tiempo, estadísticas, logout y acceso al escáner. |
+| `presentation/scan_page.dart` | Cámara y lectura del QR; navega a motivos, Inicio o Login. |
+| `presentation/reasons_page.dart` | `ReasonsPage`: motivos del predio, cuenta atrás del comprobante y confirmación. |
 
 ## 3. Pruebas
 
-| Archivo | Qué verifica | Cómo elevar cobertura/fiabilidad |
-|---|---|---|
-| `test/location_proof_test.dart` | Serialización de `LocationProof`, formato UTC y precisión mínima positiva. | Añadir casos de precisión normal, fecha local/UTC y valores límite. Probar aparte la política de permisos y errores a través de proveedores falsos. |
-| `test/login_flow_test.dart` | Contrato HTTP de login/sesión: respuestas 401/403/5xx, respuesta no JSON, encabezados del cliente e identidad estable del dispositivo. Usa adaptador Dio falso y plugins simulados. | Aislar configuración global de Dio entre tests, probar logout/cookie/errores de parseo y verificar el payload completo. Preferir factories inyectables para no mutar el singleton global. |
-| `test/widget_test.dart` | Casos de widgets para Login, Home y selección de motivo en varios tamaños; carga y error/reintento de Home con `ApiService` falso. | Incorporar tests del flujo QR/sesión/confirmación, accesibilidad y navegación; extraer fake común si aparece duplicación. Evitar depender de detalles de implementación cuando baste verificar comportamiento visible. |
-| `ios/RunnerTests/RunnerTests.swift` | Plantilla XCTest nativa sin pruebas de lógica actualmente. | Añadir pruebas solo para código nativo propio; la lógica de producto debe probarse principalmente en Dart. Eliminar la plantilla si no se usa. |
+| Archivo | Qué verifica |
+|---|---|
+| `test/core/location/location_proof_test.dart` | Serialización de `LocationProof`, formato UTC y precisión mínima positiva. |
+| `test/features/auth/login_flow_test.dart` | Contrato HTTP de login/sesión (401/403/5xx, respuesta no JSON, encabezados e identidad estable del dispositivo) con adaptador Dio falso. |
+| `test/features/leave/leave_screens_test.dart` | Login, Inicio y Motivos en varios tamaños; carga y error/reintento de Inicio con `LeaveService` falso. |
+| `ios/RunnerTests/RunnerTests.swift` | Plantilla XCTest nativa sin pruebas de lógica. |
 
 ## 4. Configuración raíz y herramientas
 
@@ -194,7 +230,7 @@ Desde la raíz, con Flutter/Dart compatibles con `pubspec.yaml`:
 flutter pub get
 flutter analyze
 flutter test
-flutter run -t lib/main_mobile.dart --dart-define=API_BASE_URL=https://<api-del-entorno>
+flutter run --dart-define=API_BASE_URL=https://<api-del-entorno>
 ```
 
 Los builds iOS requieren macOS/Xcode; Android requiere JDK y SDK Android compatibles con el wrapper/Flutter. El comando de ejecución utiliza la entrada móvil explícita y la URL de API debe pertenecer al entorno elegido.

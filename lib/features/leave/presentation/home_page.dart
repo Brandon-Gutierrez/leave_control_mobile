@@ -1,32 +1,38 @@
-import 'package:flutter/material.dart';
 import 'dart:async';
 
-import 'login_page.dart';
-import '../../services/api_service.dart';
-import '../../theme/app_colors.dart';
-import '../../theme/app_text_styles.dart';
-import '../../widgets/error_popup.dart';
+import 'package:flutter/material.dart';
+
+import '../../../core/network/api_exceptions.dart';
+import '../../../core/theme/app_colors.dart';
+import '../../../core/theme/app_text_styles.dart';
+import '../../../core/widgets/app_popup.dart';
+import '../../auth/data/auth_service.dart';
+import '../../auth/presentation/login_page.dart';
+import '../data/leave_service.dart';
+import '../models/leave_status.dart';
 import 'scan_page.dart';
 
 class HomePage extends StatefulWidget {
-  /// Permite inyectar un [ApiService] de prueba (p. ej. en tests de widgets).
-  final ApiService? apiService;
+  /// Permiten inyectar servicios de prueba (p. ej. en tests de widgets).
+  final LeaveService? leaveService;
+  final AuthService? authService;
 
-  const HomePage({super.key, this.apiService});
+  const HomePage({super.key, this.leaveService, this.authService});
 
   @override
   State<HomePage> createState() => _HomePageState();
 }
 
 class _HomePageState extends State<HomePage> {
-  late final ApiService _apiService = widget.apiService ?? ApiService();
+  late final LeaveService _leaveService = widget.leaveService ?? LeaveService();
+  late final AuthService _authService = widget.authService ?? AuthService();
   String? _name;
   String? _reason;
   String? _role;
   String? _jobTitle;
   String? _photoUrl;
   String _period = 'day';
-  Map<String, _Stat> _stats = {};
+  Map<String, LeaveStat> _stats = {};
 
   bool _isLeave = false;
   bool _isLoading = true;
@@ -56,10 +62,10 @@ class _HomePageState extends State<HomePage> {
     if (isFirstLoad && mounted) setState(() => _isLoading = true);
 
     try {
-      final data = await _apiService.checkData();
+      final status = await _leaveService.fetchLeaveStatus();
       if (!mounted) return;
 
-      if (data == null) {
+      if (status == null) {
         setState(() => _isLoading = false);
         if (isFirstLoad) {
           setState(() => _hasError = true);
@@ -72,14 +78,14 @@ class _HomePageState extends State<HomePage> {
       setState(() {
         _hasError = false;
         _isLoading = false;
-        _name = data['name'];
-        _isLeave = data['isLeave'] ?? false;
-        _dateLeave = data['dateLeave'];
-        _reason = data['reason'];
-        _role = _roleLabel(data['role']);
-        _jobTitle = data['job_title']?.toString();
-        _photoUrl = (data['photo_url'] ?? data['photo'] ?? data['avatar'])?.toString();
-        _stats = _parseStats(data['stats']);
+        _name = status.name;
+        _isLeave = status.isLeave;
+        _dateLeave = status.dateLeave;
+        _reason = status.reason;
+        _role = status.role;
+        _jobTitle = status.jobTitle;
+        _photoUrl = status.photoUrl;
+        _stats = status.stats;
       });
       _initTimer();
     } on SessionExpiredException catch (e) {
@@ -117,32 +123,6 @@ class _HomePageState extends State<HomePage> {
     }
   }
 
-  // El rol llega del servidor (texto o { name }); se muestra con nombre legible.
-  String? _roleLabel(dynamic role) {
-    final name = (role is Map ? role['name'] : role)?.toString();
-    if (name == null || name.isEmpty) return null;
-    return switch (name.toUpperCase()) {
-      'EMPLOYEE' => 'Empleado',
-      'ADMIN' => 'Administrador',
-      _ => name,
-    };
-  }
-
-  Map<String, _Stat> _parseStats(dynamic raw) {
-    if (raw is! Map) return {};
-    final result = <String, _Stat>{};
-    for (final key in const ['day', 'week', 'month']) {
-      final item = raw[key];
-      if (item is Map) {
-        result[key] = _Stat(
-          (item['exits'] as num?)?.toInt(),
-          (item['minutes'] as num?)?.toInt(),
-        );
-      }
-    }
-    return result;
-  }
-
   Future<void> _refreshData() => _loadUserData();
 
   @override
@@ -167,7 +147,7 @@ class _HomePageState extends State<HomePage> {
   }
 
   Future<void> _closeSession() async {
-    await _apiService.logout();
+    await _authService.logout();
     _goToLogin();
   }
 
@@ -549,13 +529,6 @@ class _HomePageState extends State<HomePage> {
       ],
     );
   }
-}
-
-class _Stat {
-  final int? exits;
-  final int? minutes;
-
-  const _Stat(this.exits, this.minutes);
 }
 
 class _StatNumber extends StatelessWidget {

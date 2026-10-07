@@ -19,11 +19,6 @@ class StorageService {
     return await _storage.read(key: _keyToken);
   }
 
-  //Leer el item de forma local
-  Future<String?> getItem() async {
-    return await _storage.read(key: _keyItem);
-  }
-
   //Leer el nombre de forma local
   Future<String?> getName() async {
     return await _storage.read(key: _keyName);

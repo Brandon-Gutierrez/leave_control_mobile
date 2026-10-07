@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 
-import '../../services/api_service.dart';
-import '../../theme/app_colors.dart';
-import '../../theme/app_text_styles.dart';
-import 'home_page.dart';
+import '../../../core/theme/app_colors.dart';
+import '../../../core/theme/app_text_styles.dart';
+import '../../leave/presentation/home_page.dart';
+import '../data/auth_service.dart';
 import 'login_page.dart';
 
 /// Pantalla de arranque: comprueba si ya hay una sesión válida (cookie
@@ -11,16 +11,16 @@ import 'login_page.dart';
 /// [LoginPage]. Sin esto la app siempre pedía iniciar sesión de nuevo, sin
 /// importar si la cookie seguía siendo válida.
 class SessionGate extends StatefulWidget {
-  final ApiService? apiService;
+  final AuthService? authService;
 
-  const SessionGate({super.key, this.apiService});
+  const SessionGate({super.key, this.authService});
 
   @override
   State<SessionGate> createState() => _SessionGateState();
 }
 
 class _SessionGateState extends State<SessionGate> {
-  late final ApiService _apiService = widget.apiService ?? ApiService();
+  late final AuthService _authService = widget.authService ?? AuthService();
   bool _hasNetworkError = false;
 
   @override
@@ -34,7 +34,7 @@ class _SessionGateState extends State<SessionGate> {
   Future<void> _check() async {
     setState(() => _hasNetworkError = false);
     try {
-      final hasSession = await _apiService.hasActiveSession();
+      final hasSession = await _authService.hasActiveSession();
       if (!mounted) return;
       _goTo(hasSession ? const HomePage() : const LoginPage());
     } catch (_) {

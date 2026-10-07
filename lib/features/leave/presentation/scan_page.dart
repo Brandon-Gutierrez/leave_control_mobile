@@ -1,11 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
-import '../../services/api_service.dart';
-import '../../services/location_service.dart';
-import '../../theme/app_text_styles.dart';
-import '../../widgets/error_popup.dart';
+
+import '../../../core/location/location_service.dart';
+import '../../../core/network/api_exceptions.dart';
+import '../../../core/theme/app_text_styles.dart';
+import '../../../core/widgets/app_popup.dart';
+import '../../auth/presentation/login_page.dart';
+import '../data/leave_service.dart';
 import 'home_page.dart';
-import 'login_page.dart';
 import 'reasons_page.dart';
 
 class ScanPage extends StatefulWidget {
@@ -19,7 +21,7 @@ class _ScanPageState extends State<ScanPage> {
   final MobileScannerController _scannerController = MobileScannerController(
     detectionSpeed: DetectionSpeed.noDuplicates,
   );
-  final ApiService _apiService = ApiService();
+  final LeaveService _leaveService = LeaveService();
 
   bool _isProcessing = false;
 
@@ -56,21 +58,17 @@ class _ScanPageState extends State<ScanPage> {
     await _scannerController.stop();
 
     try{
-      final response = await _apiService.userStatus(qrData);
+      final scan = await _leaveService.scanQr(qrData);
       if (!mounted) return;
 
-      final String message = response['message'] ?? 'Acción completada.';
+      showSuccessPopup(context, scan.message);
 
-      showSuccessPopup(context, message);
-
-      if (response['action'] == 'showReasons') {
+      if (scan.showsReasons) {
         // El servidor devuelve un comprobante (leaveTicket) distinto del QR
         // escaneado: es lo que hay que enviar al confirmar el motivo, no el
         // texto del QR original.
-        final leaveTicket = (response['leaveTicket'] ?? response['qrData'])?.toString();
-        final ticketExpiresAt = response['leaveTicketExpiresAt'] != null
-            ? DateTime.tryParse(response['leaveTicketExpiresAt'].toString())
-            : null;
+        final leaveTicket = scan.leaveTicket;
+        final ticketExpiresAt = scan.leaveTicketExpiresAt;
         if (leaveTicket == null || leaveTicket.isEmpty) {
           handleError('No se pudo iniciar la selección de motivo. Vuelva a escanear.');
           return;
@@ -78,7 +76,7 @@ class _ScanPageState extends State<ScanPage> {
         Navigator.pushReplacement(
           context,
           MaterialPageRoute(
-            builder: (context) => ReasonPage(
+            builder: (context) => ReasonsPage(
               qrData: qrData,
               leaveTicket: leaveTicket,
               ticketExpiresAt: ticketExpiresAt,

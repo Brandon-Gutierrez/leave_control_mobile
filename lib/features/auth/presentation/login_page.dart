@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
 
-import '../../services/api_service.dart';
-import '../../theme/app_colors.dart';
-import '../../theme/app_text_styles.dart';
-import '../../widgets/error_popup.dart';
-import 'home_page.dart';
+import '../../../core/theme/app_colors.dart';
+import '../../../core/theme/app_text_styles.dart';
+import '../../../core/widgets/app_popup.dart';
+import '../../leave/presentation/home_page.dart';
+import '../data/auth_service.dart';
 
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
@@ -15,7 +15,7 @@ class LoginPage extends StatefulWidget {
 
 class _LoginPageState extends State<LoginPage> {
   final _formKey = GlobalKey<FormState>();
-  final ApiService _apiService = ApiService();
+  final AuthService _authService = AuthService();
   final TextEditingController _usernameController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
 
@@ -41,7 +41,7 @@ class _LoginPageState extends State<LoginPage> {
       _isLoading = true;
     });
     //realiza la petición a backend; null significa que inició sesión bien
-    final error = await _apiService.login(_usernameController.text.trim(), _passwordController.text,);
+    final error = await _authService.login(_usernameController.text.trim(), _passwordController.text,);
     if (!mounted) return;
     //Desactiva el estado de carga
     setState(() {

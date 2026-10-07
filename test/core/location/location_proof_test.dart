@@ -1,4 +1,4 @@
-import 'package:control_input_output/services/location_service.dart';
+import 'package:control_input_output/core/location/location_service.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
