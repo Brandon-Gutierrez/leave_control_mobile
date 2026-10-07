@@ -475,9 +475,14 @@ class _HomePageState extends State<HomePage> {
           Container(
             margin: const EdgeInsets.only(bottom: 10),
             padding: const EdgeInsets.all(14),
-            decoration: const BoxDecoration(
-              color: AppColors.dangerBg,
-              border: Border(left: BorderSide(color: AppColors.danger, width: 8)),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              border: Border(
+                left: const BorderSide(color: AppColors.danger, width: 5),
+                top: BorderSide(color: AppColors.line),
+                right: BorderSide(color: AppColors.line),
+                bottom: BorderSide(color: AppColors.line),
+              ),
             ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
