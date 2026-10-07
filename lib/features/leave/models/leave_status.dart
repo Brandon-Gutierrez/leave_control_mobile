@@ -6,6 +6,14 @@ class LeaveStat {
   const LeaveStat(this.exits, this.minutes);
 }
 
+/// Salida de un día anterior que nunca marcó retorno.
+class UnreturnedLeave {
+  final DateTime leftAt;
+  final String? reason;
+
+  const UnreturnedLeave(this.leftAt, this.reason);
+}
+
 /// Datos de la persona y si está fuera en este momento, tal como los entrega
 /// el backend para la pantalla de inicio.
 class LeaveStatus {
@@ -28,6 +36,9 @@ class LeaveStatus {
   /// Estadísticas por período: `day`, `week` y `month`.
   final Map<String, LeaveStat> stats;
 
+  /// Salidas del último mes sin retorno (no se cuentan en las estadísticas).
+  final List<UnreturnedLeave> unreturnedLeaves;
+
   const LeaveStatus({
     required this.name,
     required this.isLeave,
@@ -37,6 +48,7 @@ class LeaveStatus {
     required this.jobTitle,
     required this.photoUrl,
     required this.stats,
+    this.unreturnedLeaves = const [],
   });
 
   factory LeaveStatus.fromJson(Map<String, dynamic> json) {
@@ -50,6 +62,14 @@ class LeaveStatus {
       photoUrl: (json['photo_url'] ?? json['photo'] ?? json['avatar'])
           ?.toString(),
       stats: _parseStats(json['stats']),
+      unreturnedLeaves: [
+        for (final raw in json['unreturned_leaves'] as List? ?? const [])
+          if (raw is Map && DateTime.tryParse('${raw['date']}') != null)
+            UnreturnedLeave(
+              DateTime.parse('${raw['date']}').toLocal(),
+              raw['reason']?.toString(),
+            ),
+      ],
     );
   }
 

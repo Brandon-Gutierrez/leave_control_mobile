@@ -33,6 +33,7 @@ class _HomePageState extends State<HomePage> {
   String? _photoUrl;
   String _period = 'day';
   Map<String, LeaveStat> _stats = {};
+  List<UnreturnedLeave> _unreturnedLeaves = [];
 
   bool _isLeave = false;
   bool _isLoading = true;
@@ -86,6 +87,7 @@ class _HomePageState extends State<HomePage> {
         _jobTitle = status.jobTitle;
         _photoUrl = status.photoUrl;
         _stats = status.stats;
+        _unreturnedLeaves = status.unreturnedLeaves;
       });
       _initTimer();
     } on SessionExpiredException catch (e) {
@@ -312,6 +314,10 @@ class _HomePageState extends State<HomePage> {
                     _buildScanButton(),
                     const SizedBox(height: 28),
                     _buildStats(),
+                    if (_unreturnedLeaves.isNotEmpty) ...[
+                      const SizedBox(height: 24),
+                      _buildUnreturnedWarnings(),
+                    ],
                   ],
                 ),
               ),
@@ -457,6 +463,56 @@ class _HomePageState extends State<HomePage> {
             ),
         ],
       ),
+    );
+  }
+
+  /// Una advertencia por cada salida del último mes que no marcó retorno.
+  Widget _buildUnreturnedWarnings() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        for (final leave in _unreturnedLeaves)
+          Container(
+            margin: const EdgeInsets.only(bottom: 10),
+            padding: const EdgeInsets.all(14),
+            decoration: const BoxDecoration(
+              color: AppColors.dangerBg,
+              border: Border(left: BorderSide(color: AppColors.danger, width: 8)),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Row(
+                  children: [
+                    Icon(Icons.warning_amber_rounded, color: AppColors.danger, size: 26),
+                    SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'Salida sin retorno',
+                        style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800, color: AppColors.danger),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  'Saliste el ${_twoDigits(leave.leftAt.day)}/${_twoDigits(leave.leftAt.month)}/${leave.leftAt.year} a las ${_twoDigits(leave.leftAt.hour)}:${_twoDigits(leave.leftAt.minute)}',
+                  style: const TextStyle(fontSize: 15, color: AppColors.darkText),
+                ),
+                if (leave.reason != null && leave.reason!.isNotEmpty)
+                  Text(
+                    'Motivo: ${leave.reason}',
+                    style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: AppColors.darkText),
+                  ),
+                const SizedBox(height: 4),
+                const Text(
+                  'No se incluye en tus contadores.',
+                  style: TextStyle(fontSize: 13, color: Colors.black54),
+                ),
+              ],
+            ),
+          ),
+      ],
     );
   }
 
