@@ -23,7 +23,7 @@ class HomePage extends StatefulWidget {
   State<HomePage> createState() => _HomePageState();
 }
 
-class _HomePageState extends State<HomePage> {
+class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   late final LeaveService _leaveService = widget.leaveService ?? LeaveService();
   late final AuthService _authService = widget.authService ?? AuthService();
   String? _name;
@@ -53,7 +53,14 @@ class _HomePageState extends State<HomePage> {
   //El estado inicial carga los datos del usuario
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _loadUserData();
+  }
+
+  /// Al volver a la app (desde segundo plano) se actualiza el estado.
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) unawaited(_loadUserData());
   }
 
   Future<void> _loadUserData() async {
@@ -129,6 +136,7 @@ class _HomePageState extends State<HomePage> {
 
   @override
   void dispose(){
+    WidgetsBinding.instance.removeObserver(this);
     _timer?.cancel();
     super.dispose();
   }
@@ -165,11 +173,13 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
-  void _goToScan() {
-    Navigator.push(
+  Future<void> _goToScan() async {
+    await Navigator.push(
       context,
       MaterialPageRoute(builder: (context) => const ScanPage()),
     );
+    // Al volver del escáner se actualiza el estado de salida.
+    if (mounted) unawaited(_loadUserData());
   }
 
   @override
