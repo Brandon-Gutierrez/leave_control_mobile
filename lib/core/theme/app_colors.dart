@@ -14,8 +14,6 @@ abstract final class AppColors {
   static const successBg = Color(0xFFEEF5EF);
   static const danger = Color(0xFFB71C1C);
   static const dangerBg = Color(0xFFFBEBEB);
-  static const warning = Color(0xFF9A6A1F);
-  static const warningBg = Color(0xFFFAF3E6);
 
   /// Información y acciones neutras: gris, no azul.
   static const info = Color(0xFF4A4A4A);

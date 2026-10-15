@@ -48,7 +48,9 @@ class LocationService {
 
   Future<LocationProof> capture() async {
     if (!await Geolocator.isLocationServiceEnabled()) {
-      throw LocationException('Activa la ubicación (GPS) de tu teléfono para continuar.');
+      throw LocationException(
+        'Activa la ubicación (GPS) de tu teléfono para continuar.',
+      );
     }
 
     var permission = await Geolocator.checkPermission();
@@ -56,15 +58,21 @@ class LocationService {
       permission = await Geolocator.requestPermission();
     }
     if (permission == LocationPermission.denied) {
-      throw LocationException('Necesitamos el permiso de ubicación para validar que estás en el predio.');
+      throw LocationException(
+        'Necesitamos el permiso de ubicación para validar que estás en el predio.',
+      );
     }
     if (permission == LocationPermission.deniedForever) {
-      throw LocationException('El permiso de ubicación está bloqueado. Actívalo en los ajustes del teléfono.');
+      throw LocationException(
+        'El permiso de ubicación está bloqueado. Actívalo en los ajustes del teléfono.',
+      );
     }
 
     final vpn = await _isVpnActive();
     if (vpn) {
-      throw LocationException('Desactiva la VPN para validar tu ubicación e intenta nuevamente.');
+      throw LocationException(
+        'Desactiva la VPN para validar tu ubicación e intenta nuevamente.',
+      );
     }
 
     final Position position;
@@ -76,11 +84,15 @@ class LocationService {
         ),
       );
     } catch (_) {
-      throw LocationException('No se pudo obtener tu ubicación. Sal a un lugar abierto e intenta nuevamente.');
+      throw LocationException(
+        'No se pudo obtener tu ubicación. Sal a un lugar abierto e intenta nuevamente.',
+      );
     }
 
     if (position.isMocked) {
-      throw LocationException('Se detectó una ubicación simulada (GPS falso). Desactívala para continuar.');
+      throw LocationException(
+        'Se detectó una ubicación simulada (GPS falso). Desactívala para continuar.',
+      );
     }
 
     return LocationProof(

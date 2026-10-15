@@ -5,9 +5,11 @@ import 'package:control_input_output/features/auth/presentation/login_page.dart'
 import 'package:control_input_output/features/leave/data/leave_service.dart';
 import 'package:control_input_output/features/leave/models/leave_status.dart';
 import 'package:control_input_output/features/leave/models/qr_scan_result.dart';
+import 'package:control_input_output/features/leave/presentation/date_range_sheet.dart';
 import 'package:control_input_output/features/leave/presentation/home_page.dart';
 import 'package:control_input_output/features/leave/presentation/reasons_page.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 /// Tamaños lógicos de teléfonos comunes (ancho x alto).
@@ -33,15 +35,33 @@ class _FakeLeaveService implements LeaveService {
       ? null
       : LeaveStatus.fromJson(leaveStatusResponse!);
 
+  /// Último rango consultado y resultado que devuelve el fake.
+  DateTimeRange? requestedRange;
+  LeaveStat? rangeResponse = const LeaveStat(3, 45);
+
+  @override
+  Future<LeaveStat?> fetchRangeStats(DateTime from, DateTime to) async {
+    requestedRange = DateTimeRange(start: from, end: to);
+    return rangeResponse;
+  }
+
   @override
   Future<List<String>?> getReasons(String namePremise) async => reasonsResponse;
 
   @override
-  Future<void> confirmLeave(String namePremise, String nameReason, String qrData) async {}
+  Future<void> confirmLeave(
+    String namePremise,
+    String nameReason,
+    String qrData,
+  ) async {}
 
   @override
-  Future<QrScanResult> scanQr(String qrData) async =>
-      const QrScanResult(message: '', action: null, leaveTicket: null, leaveTicketExpiresAt: null);
+  Future<QrScanResult> scanQr(String qrData) async => const QrScanResult(
+    message: '',
+    action: null,
+    leaveTicket: null,
+    leaveTicketExpiresAt: null,
+  );
 }
 
 /// Deja que la Future falsa (instantánea) se resuelva y la UI se actualice.
@@ -74,12 +94,16 @@ void main() {
       expect(find.text('Ingresar'), findsOneWidget);
     });
 
-    testWidgets('HomePage sin salida activa no desborda en ${entry.key}', (tester) async {
+    testWidgets('HomePage sin salida activa no desborda en ${entry.key}', (
+      tester,
+    ) async {
       tester.view.physicalSize = entry.value;
       tester.view.devicePixelRatio = 1.0;
       addTearDown(tester.view.reset);
 
-      final api = _FakeLeaveService(leaveStatusResponse: {'name': 'Juan Pérez', 'isLeave': false});
+      final api = _FakeLeaveService(
+        leaveStatusResponse: {'name': 'Juan Pérez', 'isLeave': false},
+      );
       await tester.pumpWidget(MaterialApp(home: HomePage(leaveService: api)));
       await _settle(tester);
 
@@ -90,34 +114,43 @@ void main() {
       await _tearDownTimers(tester);
     });
 
-    testWidgets('HomePage con salida activa y motivo no desborda en ${entry.key}', (tester) async {
-      tester.view.physicalSize = entry.value;
-      tester.view.devicePixelRatio = 1.0;
-      addTearDown(tester.view.reset);
+    testWidgets(
+      'HomePage con salida activa y motivo no desborda en ${entry.key}',
+      (tester) async {
+        tester.view.physicalSize = entry.value;
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(tester.view.reset);
 
-      final api = _FakeLeaveService(leaveStatusResponse: {
-        'name': 'Juan Pérez',
-        'isLeave': true,
-        'dateLeave': DateTime.now().subtract(const Duration(minutes: 5)).toIso8601String(),
-        'reason': 'Trámite bancario',
-      });
-      await tester.pumpWidget(MaterialApp(home: HomePage(leaveService: api)));
-      await _settle(tester);
+        final api = _FakeLeaveService(
+          leaveStatusResponse: {
+            'name': 'Juan Pérez',
+            'isLeave': true,
+            'dateLeave': DateTime.now()
+                .subtract(const Duration(minutes: 5))
+                .toIso8601String(),
+            'reason': 'Trámite bancario',
+          },
+        );
+        await tester.pumpWidget(MaterialApp(home: HomePage(leaveService: api)));
+        await _settle(tester);
 
-      expect(tester.takeException(), isNull);
-      expect(find.text('Registrar mi retorno'), findsOneWidget);
-      expect(find.textContaining('Trámite bancario'), findsOneWidget);
-      expect(find.text('Tiempo transcurrido'), findsOneWidget);
+        expect(tester.takeException(), isNull);
+        expect(find.text('Registrar mi retorno'), findsOneWidget);
+        expect(find.textContaining('Trámite bancario'), findsOneWidget);
+        expect(find.text('Tiempo transcurrido'), findsOneWidget);
 
-      await _tearDownTimers(tester);
-    });
+        await _tearDownTimers(tester);
+      },
+    );
 
     testWidgets('ReasonsPage no desborda en ${entry.key}', (tester) async {
       tester.view.physicalSize = entry.value;
       tester.view.devicePixelRatio = 1.0;
       addTearDown(tester.view.reset);
 
-      final api = _FakeLeaveService(reasonsResponse: ['Trámite bancario', 'Cita médica']);
+      final api = _FakeLeaveService(
+        reasonsResponse: ['Trámite bancario', 'Cita médica'],
+      );
       await tester.pumpWidget(
         MaterialApp(
           home: ReasonsPage(
@@ -137,7 +170,9 @@ void main() {
     });
   }
 
-  testWidgets('HomePage nunca muestra una pantalla en blanco mientras carga', (tester) async {
+  testWidgets('HomePage nunca muestra una pantalla en blanco mientras carga', (
+    tester,
+  ) async {
     // Nunca se resuelve hasta que el test lo decida: simula la espera de la red.
     final neverCompletes = Completer<LeaveStatus?>();
     final slowApi = _SlowFakeLeaveService(neverCompletes.future);
@@ -151,31 +186,114 @@ void main() {
     expect(find.byType(CircularProgressIndicator), findsOneWidget);
     expect(find.text('Cargando tu información...'), findsOneWidget);
 
-    neverCompletes.complete(LeaveStatus.fromJson({'name': 'Juan Pérez', 'isLeave': false}));
+    neverCompletes.complete(
+      LeaveStatus.fromJson({'name': 'Juan Pérez', 'isLeave': false}),
+    );
     await _settle(tester);
     await _tearDownTimers(tester);
   });
 
-  testWidgets('HomePage muestra un mensaje claro y reintentar si falla la carga', (tester) async {
-    final api = _FakeLeaveService(leaveStatusResponse: null); // fuerza el error simulado
+  testWidgets('HomePage filtra tus salidas por un rango del calendario', (
+    tester,
+  ) async {
+    final api = _FakeLeaveService(
+      leaveStatusResponse: {
+        'name': 'Juan Pérez',
+        'isLeave': false,
+        'stats': {
+          'day': {'exits': 1, 'minutes': 10},
+        },
+      },
+    );
+    await tester.pumpWidget(
+      MaterialApp(
+        locale: const Locale('es'),
+        supportedLocales: const [Locale('es')],
+        localizationsDelegates: GlobalMaterialLocalizations.delegates,
+        home: HomePage(leaveService: api),
+      ),
+    );
+    await _settle(tester);
+    // Por defecto muestra hoy, con los contadores del día.
+    expect(find.text('Hoy'), findsOneWidget);
+    expect(find.text('10 min'), findsOneWidget);
+    expect(find.text('Día siguiente'), findsNothing);
 
+    await tester.tap(find.byTooltip('Elegir fecha'));
+    await tester.pumpAndSettle();
+    expect(find.text('Elige una fecha'), findsOneWidget);
+
+    // Un solo día: se toca dos veces el mismo día y se aplica.
+    final firstOfMonth = find.descendant(
+      of: find.byType(DateRangeSheet),
+      matching: find.text('1'),
+    );
+    await tester.tap(firstOfMonth.first);
+    await tester.pump();
+    await tester.tap(find.text('Aplicar'));
+    await tester.pumpAndSettle();
+    await _settle(tester);
+
+    if (DateTime.now().day != 1) {
+      expect(api.requestedRange, isNotNull);
+      expect(api.requestedRange!.start, api.requestedRange!.end);
+      expect(find.text('45 min'), findsOneWidget); // tiempo del día elegido
+      expect(find.text('Hoy'), findsNothing);
+    }
+
+    await tester.tap(find.text('Volver a hoy'));
+    await tester.pump();
+    expect(find.text('Hoy'), findsOneWidget);
+    expect(find.text('10 min'), findsOneWidget);
+
+    await _tearDownTimers(tester);
+  });
+
+  testWidgets('HomePage navega día a día con las flechas', (tester) async {
+    final api = _FakeLeaveService(
+      leaveStatusResponse: {'name': 'Juan Pérez', 'isLeave': false},
+    );
     await tester.pumpWidget(MaterialApp(home: HomePage(leaveService: api)));
     await _settle(tester);
 
-    expect(tester.takeException(), isNull);
-    expect(find.text('No se pudo cargar tu información'), findsOneWidget);
-    expect(find.text('Reintentar'), findsOneWidget);
+    await tester.tap(find.byTooltip('Día anterior'));
+    await tester.pump();
+    await tester.pump();
+    expect(find.text('Ayer'), findsOneWidget);
+    expect(find.text('3'), findsOneWidget); // salidas del fake
 
-    // Al reintentar con datos disponibles, se debe mostrar el contenido normal.
-    api.leaveStatusResponse = {'name': 'Juan Pérez', 'isLeave': false};
-    await tester.tap(find.text('Reintentar'));
-    await _settle(tester);
-
-    expect(tester.takeException(), isNull);
-    expect(find.text('Registrar mi salida'), findsOneWidget);
+    await tester.tap(find.byTooltip('Día siguiente'));
+    await tester.pump();
+    expect(find.text('Hoy'), findsOneWidget);
 
     await _tearDownTimers(tester);
   });
+
+  testWidgets(
+    'HomePage muestra un mensaje claro y reintentar si falla la carga',
+    (tester) async {
+      final api = _FakeLeaveService(
+        leaveStatusResponse: null,
+      ); // fuerza el error simulado
+
+      await tester.pumpWidget(MaterialApp(home: HomePage(leaveService: api)));
+      await _settle(tester);
+
+      expect(tester.takeException(), isNull);
+      expect(find.text('No se pudo cargar tu información'), findsOneWidget);
+      expect(find.text('Reintentar'), findsOneWidget);
+
+      // Al reintentar con datos disponibles, se debe mostrar el contenido normal.
+      api.leaveStatusResponse = {'name': 'Juan Pérez', 'isLeave': false};
+      await tester.tap(find.text('Reintentar'));
+      await _settle(tester);
+
+      expect(tester.takeException(), isNull);
+      expect(find.text('Registrar mi salida'), findsOneWidget);
+
+      await _tearDownTimers(tester);
+    },
+  );
 }
 
 /// [LeaveService] falso cuya respuesta se resuelve solo cuando el test lo pide
@@ -188,11 +306,20 @@ class _SlowFakeLeaveService implements LeaveService {
   Future<LeaveStatus?> fetchLeaveStatus() => _pending;
 
   @override
+  Future<LeaveStat?> fetchRangeStats(DateTime from, DateTime to) async => null;
+
+  @override
   Future<List<String>?> getReasons(String namePremise) async => null;
 
   @override
-  Future<void> confirmLeave(String namePremise, String nameReason, String qrData) async {
-    throw ApiRequestException('No se pudo registrar la salida. Intenta nuevamente.');
+  Future<void> confirmLeave(
+    String namePremise,
+    String nameReason,
+    String qrData,
+  ) async {
+    throw ApiRequestException(
+      'No se pudo registrar la salida. Intenta nuevamente.',
+    );
   }
 
   @override

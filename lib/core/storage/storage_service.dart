@@ -8,9 +8,9 @@ class StorageService {
   static const _keyDeviceId = 'device_id';
 
   //Guardar data de forma local
-  Future<void> saveData (String name,String item, String token) async { 
+  Future<void> saveData(String name, String item, String token) async {
     await _storage.write(key: _keyToken, value: token);
-    await _storage.write(key: _keyItem, value: item);  
+    await _storage.write(key: _keyItem, value: item);
     await _storage.write(key: _keyName, value: name);
   }
 
@@ -25,7 +25,7 @@ class StorageService {
   }
 
   //Actualizar data de forma local
-  Future<void> updateData (String token, String name) async {
+  Future<void> updateData(String token, String name) async {
     await _storage.write(key: _keyToken, value: token);
     await _storage.write(key: _keyName, value: name);
   }

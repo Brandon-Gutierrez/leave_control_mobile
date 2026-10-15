@@ -23,7 +23,7 @@ class _LoginPageState extends State<LoginPage> {
   bool _isPasswordObscured = true;
 
   static const Color primaryRed = AppColors.primaryRed;
-  static const Color darkText = Color(0xFF1A1A1A);
+  static const Color darkText = AppColors.darkText;
   static const Color lightBg = AppColors.loginBg;
 
   @override
@@ -41,7 +41,10 @@ class _LoginPageState extends State<LoginPage> {
       _isLoading = true;
     });
     //realiza la petición a backend; null significa que inició sesión bien
-    final error = await _authService.login(_usernameController.text.trim(), _passwordController.text,);
+    final error = await _authService.login(
+      _usernameController.text.trim(),
+      _passwordController.text,
+    );
     if (!mounted) return;
     //Desactiva el estado de carga
     setState(() {
@@ -84,7 +87,7 @@ class _LoginPageState extends State<LoginPage> {
       ),
       errorBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(10),
-        borderSide: BorderSide(color: Colors.red.shade300),
+        borderSide: BorderSide(color: AppColors.danger),
       ),
       focusedErrorBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(10),

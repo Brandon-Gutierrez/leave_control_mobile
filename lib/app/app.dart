@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 
 import '../core/theme/app_theme.dart';
 import '../features/auth/presentation/session_gate.dart';
@@ -13,6 +14,9 @@ class ControlLeavesApp extends StatelessWidget {
       debugShowCheckedModeBanner: false,
       title: 'Mobile app',
       theme: buildAppTheme(),
+      locale: const Locale('es'),
+      supportedLocales: const [Locale('es')],
+      localizationsDelegates: GlobalMaterialLocalizations.delegates,
       home: const SessionGate(),
     );
   }

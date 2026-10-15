@@ -37,8 +37,7 @@ class ReasonsPage extends StatefulWidget {
   State<ReasonsPage> createState() => _ReasonsPageState();
 }
 
-class _ReasonsPageState extends State<ReasonsPage>{
-
+class _ReasonsPageState extends State<ReasonsPage> {
   late final LeaveService _leaveService = widget.leaveService ?? LeaveService();
 
   String _namePremise = '';
@@ -56,7 +55,7 @@ class _ReasonsPageState extends State<ReasonsPage>{
   static const lightBg = AppColors.lightBg;
 
   @override
-  void initState(){
+  void initState() {
     super.initState();
     _namePremise = widget.qrData.split('+').first;
     _loadReasons();
@@ -91,7 +90,10 @@ class _ReasonsPageState extends State<ReasonsPage>{
 
   void _onTicketExpired() {
     if (!mounted || _isSubmitting) return;
-    showErrorPopup(context, 'Se acabó el tiempo para elegir el motivo. Vuelva a escanear el QR.');
+    showErrorPopup(
+      context,
+      'Se acabó el tiempo para elegir el motivo. Vuelva a escanear el QR.',
+    );
     Navigator.pushAndRemoveUntil(
       context,
       MaterialPageRoute(builder: (context) => const HomePage()),
@@ -102,15 +104,15 @@ class _ReasonsPageState extends State<ReasonsPage>{
   Future<void> _refreshData() => _loadReasons();
 
   Future<void> _loadReasons() async {
-    setState((){
+    setState(() {
       _isLoading = true;
       _errorMessage = null;
     });
 
-    try{
+    try {
       final data = await _leaveService.getReasons(_namePremise);
       if (!mounted) return;
-      setState((){
+      setState(() {
         if (data == null) {
           _errorMessage = 'No se pudieron cargar los motivos de salida';
         } else {
@@ -134,69 +136,68 @@ class _ReasonsPageState extends State<ReasonsPage>{
   }
 
   Future<void> _confirmSelection() async {
-  if (_selectedReason == null || _isSubmitting) return;
+    if (_selectedReason == null || _isSubmitting) return;
 
-  setState(() {
-    _isSubmitting = true;
-  });
+    setState(() {
+      _isSubmitting = true;
+    });
 
-  try {
-    await _leaveService.confirmLeave(
-      _namePremise,
-      _selectedReason!,
-      widget.leaveTicket,
-    );
+    try {
+      await _leaveService.confirmLeave(
+        _namePremise,
+        _selectedReason!,
+        widget.leaveTicket,
+      );
 
-    // Verificar si el widget sigue activo en el árbol tras la llamada asíncrona
-    if (!mounted) return;
-    _countdownTimer?.cancel();
-
-    showSuccessPopup(context, 'Salida registrada correctamente');
-
-    // Navegar a HomePage limpiando las pantallas anteriores de la pila
-    Navigator.pushAndRemoveUntil(
-      context,
-      MaterialPageRoute(builder: (context) => const HomePage()),
-      (route) => false,
-    );
-  } on SessionExpiredException catch (e) {
-    _goToLogin(e.message);
-  } on ApiRequestException catch (e) {
-    if (!mounted) return;
-    // El comprobante del escaneo ya no sirve: no tiene sentido dejar al
-    // usuario reintentando con el mismo motivo, hay que volver a escanear.
-    const expiredCodes = {'LEAVE_TICKET_EXPIRED', 'LEAVE_TICKET_INVALID'};
-    if (expiredCodes.contains(e.code)) {
+      // Verificar si el widget sigue activo en el árbol tras la llamada asíncrona
+      if (!mounted) return;
       _countdownTimer?.cancel();
-      showErrorPopup(context, e.message);
+
+      showSuccessPopup(context, 'Salida registrada correctamente');
+
+      // Navegar a HomePage limpiando las pantallas anteriores de la pila
       Navigator.pushAndRemoveUntil(
         context,
         MaterialPageRoute(builder: (context) => const HomePage()),
         (route) => false,
       );
-      return;
+    } on SessionExpiredException catch (e) {
+      _goToLogin(e.message);
+    } on ApiRequestException catch (e) {
+      if (!mounted) return;
+      // El comprobante del escaneo ya no sirve: no tiene sentido dejar al
+      // usuario reintentando con el mismo motivo, hay que volver a escanear.
+      const expiredCodes = {'LEAVE_TICKET_EXPIRED', 'LEAVE_TICKET_INVALID'};
+      if (expiredCodes.contains(e.code)) {
+        _countdownTimer?.cancel();
+        showErrorPopup(context, e.message);
+        Navigator.pushAndRemoveUntil(
+          context,
+          MaterialPageRoute(builder: (context) => const HomePage()),
+          (route) => false,
+        );
+        return;
+      }
+      setState(() {
+        _isSubmitting = false;
+      });
+      showErrorPopup(context, e.message);
+    } on LocationException catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _isSubmitting = false;
+      });
+      showErrorPopup(context, e.message);
+    } catch (e) {
+      if (!mounted) return;
+
+      setState(() {
+        _isSubmitting = false;
+      });
+
+      showErrorPopup(context, 'Ocurrió un error inesperado en el servidor.');
     }
-    setState(() {
-      _isSubmitting = false;
-    });
-    showErrorPopup(context, e.message);
-  } on LocationException catch (e) {
-    if (!mounted) return;
-    setState(() {
-      _isSubmitting = false;
-    });
-    showErrorPopup(context, e.message);
-  } catch (e) {
-    if (!mounted) return;
-
-    setState(() {
-      _isSubmitting = false;
-    });
-
-    showErrorPopup(context, 'Ocurrió un error inesperado en el servidor.');
   }
-}
-
 
   @override
   Widget build(BuildContext context) {
@@ -204,11 +205,12 @@ class _ReasonsPageState extends State<ReasonsPage>{
       appBar: AppBar(
         title: const FittedBox(
           fit: BoxFit.scaleDown,
-          child: Text('SELECCIONAR MOTIVO DE SALIDA',
-          style: TextStyle(
-            color:darkText,
-            fontSize: 18,
-            fontWeight: FontWeight.bold,
+          child: Text(
+            'SELECCIONAR MOTIVO DE SALIDA',
+            style: TextStyle(
+              color: darkText,
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
             ),
           ),
         ),
@@ -241,7 +243,9 @@ class _ReasonsPageState extends State<ReasonsPage>{
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
       decoration: BoxDecoration(
-        color: isUrgent ? primaryRed.withValues(alpha: 0.12) : Colors.grey.shade200,
+        color: isUrgent
+            ? primaryRed.withValues(alpha: 0.12)
+            : Colors.grey.shade200,
         borderRadius: BorderRadius.circular(20),
       ),
       child: Row(
@@ -268,9 +272,7 @@ class _ReasonsPageState extends State<ReasonsPage>{
 
   Widget _buildBody() {
     if (_isLoading) {
-      return const Center(
-        child: CircularProgressIndicator(color: primaryRed),
-      );
+      return const Center(child: CircularProgressIndicator(color: primaryRed));
     }
 
     if (_errorMessage != null) {
@@ -283,7 +285,11 @@ class _ReasonsPageState extends State<ReasonsPage>{
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Icon(Icons.error_outline_rounded, size: 48, color: Colors.grey.shade400),
+                Icon(
+                  Icons.error_outline_rounded,
+                  size: 48,
+                  color: Colors.grey.shade400,
+                ),
                 const SizedBox(height: 12),
                 Text(
                   _errorMessage!,
@@ -294,7 +300,10 @@ class _ReasonsPageState extends State<ReasonsPage>{
                 TextButton.icon(
                   onPressed: _loadReasons,
                   icon: const Icon(Icons.refresh_rounded, color: primaryRed),
-                  label: const Text('Reintentar', style: TextStyle(color: primaryRed)),
+                  label: const Text(
+                    'Reintentar',
+                    style: TextStyle(color: primaryRed),
+                  ),
                 ),
               ],
             ),
@@ -329,12 +338,15 @@ class _ReasonsPageState extends State<ReasonsPage>{
         final double horizontalPadding = width > 600
             ? (width - 520) / 2
             : width < 360
-                ? 16.0
-                : 28.0;
+            ? 16.0
+            : 28.0;
 
         return ListView(
           physics: const AlwaysScrollableScrollPhysics(),
-          padding: EdgeInsets.symmetric(horizontal: horizontalPadding, vertical: 16.0),
+          padding: EdgeInsets.symmetric(
+            horizontal: horizontalPadding,
+            vertical: 16.0,
+          ),
           children: [
             Text(
               'Selecciona la razón de tu salida',
@@ -369,7 +381,10 @@ class _ReasonsPageState extends State<ReasonsPage>{
           },
           child: AnimatedContainer(
             duration: const Duration(milliseconds: 180),
-            padding: const EdgeInsets.symmetric(vertical: 16.0, horizontal: 16.0),
+            padding: const EdgeInsets.symmetric(
+              vertical: 16.0,
+              horizontal: 16.0,
+            ),
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(12),
               border: Border.all(
@@ -380,7 +395,9 @@ class _ReasonsPageState extends State<ReasonsPage>{
             child: Row(
               children: [
                 Icon(
-                  isSelected ? Icons.radio_button_checked_rounded : Icons.radio_button_off_rounded,
+                  isSelected
+                      ? Icons.radio_button_checked_rounded
+                      : Icons.radio_button_off_rounded,
                   color: isSelected ? primaryRed : Colors.grey.shade400,
                   size: 22,
                 ),
@@ -390,7 +407,9 @@ class _ReasonsPageState extends State<ReasonsPage>{
                     reason,
                     style: TextStyle(
                       fontSize: 16,
-                      fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
+                      fontWeight: isSelected
+                          ? FontWeight.bold
+                          : FontWeight.w500,
                       color: isSelected ? darkText : Colors.grey.shade800,
                     ),
                   ),
@@ -433,16 +452,24 @@ class _ReasonsPageState extends State<ReasonsPage>{
                       borderRadius: BorderRadius.circular(10),
                     ),
                   ),
-                  onPressed: _selectedReason != null && !_isSubmitting ? _confirmSelection : null,
+                  onPressed: _selectedReason != null && !_isSubmitting
+                      ? _confirmSelection
+                      : null,
                   child: _isSubmitting
                       ? const SizedBox(
                           height: 20,
                           width: 20,
-                          child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: Colors.white,
+                          ),
                         )
                       : const Text(
                           'Confirmar Selección',
-                          style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                          ),
                         ),
                 ),
               ),

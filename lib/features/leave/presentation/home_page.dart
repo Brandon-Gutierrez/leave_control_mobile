@@ -10,6 +10,7 @@ import '../../auth/data/auth_service.dart';
 import '../../auth/presentation/login_page.dart';
 import '../data/leave_service.dart';
 import '../models/leave_status.dart';
+import 'date_range_sheet.dart';
 import 'scan_page.dart';
 
 class HomePage extends StatefulWidget {
@@ -31,8 +32,12 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   String? _role;
   String? _jobTitle;
   String? _photoUrl;
-  String _period = 'day';
   Map<String, LeaveStat> _stats = {};
+
+  /// Fechas elegidas en el calendario; null = hoy (siempre al día).
+  DateTimeRange? _range;
+  LeaveStat? _rangeStat;
+  bool _rangeLoading = false;
   List<UnreturnedLeave> _unreturnedLeaves = [];
 
   bool _isLeave = false;
@@ -97,9 +102,92 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         _unreturnedLeaves = status.unreturnedLeaves;
       });
       _initTimer();
+      if (_range != null) unawaited(_loadRange(_range!));
     } on SessionExpiredException catch (e) {
       _goToLogin(e.message);
     }
+  }
+
+  static DateTime _dateOnly(DateTime d) => DateTime(d.year, d.month, d.day);
+
+  static bool _isSingleDay(DateTimeRange r) =>
+      _dateOnly(r.start) == _dateOnly(r.end);
+
+  Future<void> _pickRange() async {
+    final today = _dateOnly(DateTime.now());
+    final picked = await showDateRangeSheet(
+      context,
+      initial: _range ?? DateTimeRange(start: today, end: today),
+      firstDate: DateTime(today.year - 2),
+      lastDate: today,
+    );
+    if (picked == null || !mounted) return;
+    _showRange(
+      DateTimeRange(start: _dateOnly(picked.start), end: _dateOnly(picked.end)),
+    );
+  }
+
+  /// Mueve la fecha un día; al llegar a hoy vuelve al modo "hoy".
+  void _shiftDay(int delta) {
+    final base = _range?.start ?? _dateOnly(DateTime.now());
+    final day = DateTime(base.year, base.month, base.day + delta);
+    _showRange(DateTimeRange(start: day, end: day));
+  }
+
+  void _showRange(DateTimeRange range) {
+    final today = _dateOnly(DateTime.now());
+    if (_isSingleDay(range) && !range.start.isBefore(today)) {
+      _clearRange();
+      return;
+    }
+    setState(() {
+      _range = range;
+      _rangeStat = null;
+    });
+    unawaited(_loadRange(range));
+  }
+
+  Future<void> _loadRange(DateTimeRange range) async {
+    setState(() => _rangeLoading = true);
+    try {
+      final stat = await _leaveService.fetchRangeStats(range.start, range.end);
+      if (!mounted || _range != range) return;
+      setState(() {
+        _rangeStat = stat;
+        _rangeLoading = false;
+      });
+      if (stat == null) _showSnackBar('No se pudo consultar esas fechas.');
+    } on SessionExpiredException catch (e) {
+      _goToLogin(e.message);
+    }
+  }
+
+  void _clearRange() => setState(() {
+    _range = null;
+    _rangeStat = null;
+    _rangeLoading = false;
+  });
+
+  String _formatDay(DateTime d) =>
+      '${_twoDigits(d.day)}/${_twoDigits(d.month)}/${d.year}';
+
+  /// "Hoy", "Ayer", una fecha o un rango, según lo elegido.
+  String _rangeTitle() {
+    final r = _range;
+    if (r == null) return 'Hoy';
+    if (!_isSingleDay(r)) {
+      return '${_formatDay(r.start)} – ${_formatDay(r.end)}';
+    }
+    final today = _dateOnly(DateTime.now());
+    final yesterday = DateTime(today.year, today.month, today.day - 1);
+    return r.start == yesterday ? 'Ayer' : _formatDay(r.start);
+  }
+
+  String _formatMinutes(int minutes) {
+    if (minutes < 60) return '$minutes min';
+    final h = minutes ~/ 60;
+    final m = minutes % 60;
+    return m == 0 ? '$h h' : '$h h $m min';
   }
 
   void _showSnackBar(String message) {
@@ -107,7 +195,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     showErrorPopup(context, message);
   }
 
-  void _initTimer(){
+  void _initTimer() {
     _timer?.cancel();
     if (!_isLeave || _dateLeave == null) {
       _startDate = null;
@@ -117,15 +205,15 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
 
     _updateDuration();
 
-    _timer = Timer.periodic(const Duration(seconds: 1), (timer){
+    _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
       _updateDuration();
     });
   }
 
-  void _updateDuration(){
-    if (_startDate != null && mounted){
+  void _updateDuration() {
+    if (_startDate != null && mounted) {
       final now = DateTime.now();
-      setState((){
+      setState(() {
         final difference = now.difference(_startDate!);
         _duration = difference.isNegative ? Duration.zero : difference;
       });
@@ -135,7 +223,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   Future<void> _refreshData() => _loadUserData();
 
   @override
-  void dispose(){
+  void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _timer?.cancel();
     super.dispose();
@@ -204,7 +292,11 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         elevation: 0,
         actions: [
           IconButton(
-            icon: const Icon(Icons.logout, color: AppColors.danger, size: AppDimens.iconSize),
+            icon: const Icon(
+              Icons.logout,
+              color: AppColors.danger,
+              size: AppDimens.iconSize,
+            ),
             tooltip: 'Cerrar sesión',
             onPressed: _closeSession,
           ),
@@ -212,9 +304,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       ),
       // Nunca queda una pantalla en blanco: siempre hay una vista de carga,
       // de error con reintento, o el contenido ya cargado.
-      body: SafeArea(
-        child: _isLoading ? _buildLoadingView() : _buildBody(),
-      ),
+      body: SafeArea(child: _isLoading ? _buildLoadingView() : _buildBody()),
     );
   }
 
@@ -227,11 +317,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
             'rsc/comteco.png',
             height: 50,
             fit: BoxFit.contain,
-            errorBuilder: (_, _, _) => const Icon(
-              Icons.business_rounded,
-              size: 40,
-              color: darkText,
-            ),
+            errorBuilder: (_, _, _) =>
+                const Icon(Icons.business_rounded, size: 40, color: darkText),
           ),
           const SizedBox(height: 28),
           const CircularProgressIndicator(color: primaryRed),
@@ -248,7 +335,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   Widget _buildBody() {
     return RefreshIndicator(
       onRefresh: _refreshData,
-      color: Colors.white,            // Color del spinner
+      color: Colors.white, // Color del spinner
       backgroundColor: primaryRed,
       child: _hasError ? _buildErrorView() : _buildContent(),
     );
@@ -266,7 +353,11 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Icon(Icons.wifi_off_rounded, size: 48, color: Colors.grey.shade400),
+                  Icon(
+                    Icons.wifi_off_rounded,
+                    size: 48,
+                    color: Colors.grey.shade400,
+                  ),
                   const SizedBox(height: 12),
                   Text(
                     'No se pudo cargar tu información',
@@ -366,7 +457,11 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
                   const SizedBox(height: 4),
                   Row(
                     children: [
-                      const Icon(Icons.badge_outlined, size: 18, color: AppColors.info),
+                      const Icon(
+                        Icons.badge_outlined,
+                        size: 18,
+                        color: AppColors.info,
+                      ),
                       const SizedBox(width: 6),
                       Flexible(
                         child: Text(
@@ -399,10 +494,11 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     );
   }
 
-  /// Estado en un vistazo y por color: verde = adentro, ámbar = fuera.
+  /// Estado en un vistazo: verde = adentro, gris = fuera.
   Widget _buildStatusPanel() {
-    final color = _isLeave ? AppColors.warning : AppColors.success;
-    final bg = _isLeave ? AppColors.warningBg : AppColors.successBg;
+    // Adentro = verde apagado; fuera = gris neutro (sin un tercer color).
+    final color = _isLeave ? AppColors.darkText : AppColors.success;
+    final bg = _isLeave ? AppColors.infoBg : AppColors.successBg;
     final days = _duration.inDays;
     final hms =
         '${_twoDigits(_duration.inHours.remainder(24))}:${_twoDigits(_duration.inMinutes.remainder(60))}:${_twoDigits(_duration.inSeconds.remainder(60))}';
@@ -419,7 +515,9 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
           Row(
             children: [
               Icon(
-                _isLeave ? Icons.directions_walk_rounded : Icons.check_circle_rounded,
+                _isLeave
+                    ? Icons.directions_walk_rounded
+                    : Icons.check_circle_rounded,
                 color: color,
                 size: 32,
               ),
@@ -427,7 +525,11 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
               Expanded(
                 child: Text(
                   _isLeave ? 'Estás fuera' : 'Estás adentro',
-                  style: TextStyle(fontSize: 24, fontWeight: FontWeight.w800, color: color),
+                  style: TextStyle(
+                    fontSize: 24,
+                    fontWeight: FontWeight.w800,
+                    color: color,
+                  ),
                 ),
               ),
             ],
@@ -460,7 +562,11 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
               const SizedBox(height: 10),
               Text(
                 'Motivo: $_reason',
-                style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: darkText),
+                style: const TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w700,
+                  color: darkText,
+                ),
               ),
             ],
           ] else
@@ -499,12 +605,20 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
               children: [
                 const Row(
                   children: [
-                    Icon(Icons.warning_amber_rounded, color: AppColors.danger, size: 26),
+                    Icon(
+                      Icons.warning_amber_rounded,
+                      color: AppColors.danger,
+                      size: 26,
+                    ),
                     SizedBox(width: 8),
                     Expanded(
                       child: Text(
                         'Salida sin retorno',
-                        style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800, color: AppColors.danger),
+                        style: TextStyle(
+                          fontSize: 17,
+                          fontWeight: FontWeight.w800,
+                          color: AppColors.danger,
+                        ),
                       ),
                     ),
                   ],
@@ -512,12 +626,19 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
                 const SizedBox(height: 6),
                 Text(
                   'Saliste el ${_twoDigits(leave.leftAt.day)}/${_twoDigits(leave.leftAt.month)}/${leave.leftAt.year} a las ${_twoDigits(leave.leftAt.hour)}:${_twoDigits(leave.leftAt.minute)}',
-                  style: const TextStyle(fontSize: 15, color: AppColors.darkText),
+                  style: const TextStyle(
+                    fontSize: 15,
+                    color: AppColors.darkText,
+                  ),
                 ),
                 if (leave.reason != null && leave.reason!.isNotEmpty)
                   Text(
                     'Motivo: ${leave.reason}',
-                    style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: AppColors.darkText),
+                    style: const TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w700,
+                      color: AppColors.darkText,
+                    ),
                   ),
                 const SizedBox(height: 4),
                 const Text(
@@ -538,7 +659,10 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       child: FilledButton.icon(
         onPressed: _goToScan,
         icon: const Icon(Icons.qr_code_scanner_rounded, size: 32),
-        label: Text(title, style: const TextStyle(fontSize: 19, fontWeight: FontWeight.w800)),
+        label: Text(
+          title,
+          style: const TextStyle(fontSize: 19, fontWeight: FontWeight.w800),
+        ),
         style: FilledButton.styleFrom(
           backgroundColor: primaryRed,
           foregroundColor: Colors.white,
@@ -548,55 +672,150 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     );
   }
 
-  /// Cuántas veces y cuántos minutos salió: hoy, esta semana o este mes
-  /// (periodos reales del calendario, calculados por el servidor).
+  /// Cuántas veces y cuánto tiempo salió en la fecha elegida (por defecto hoy).
   Widget _buildStats() {
-    final stat = _stats[_period];
-    String show(int? v) => v == null ? '—' : '$v';
+    final range = _range;
+    final stat = range != null ? _rangeStat : _stats['day'];
+    final loading = range != null && _rangeLoading;
+    final exits = loading ? null : stat?.exits;
+    final minutes = loading ? null : stat?.minutes;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         const Text(
           'Tus salidas',
-          style: TextStyle(fontSize: 19, fontWeight: FontWeight.w800, color: darkText),
-        ),
-        const SizedBox(height: 10),
-        SegmentedButton<String>(
-          showSelectedIcon: false,
-          segments: const [
-            ButtonSegment(value: 'day', label: Text('Hoy')),
-            ButtonSegment(value: 'week', label: Text('Esta semana')),
-            ButtonSegment(value: 'month', label: Text('Este mes')),
-          ],
-          selected: {_period},
-          onSelectionChanged: (s) => setState(() => _period = s.first),
-          style: SegmentedButton.styleFrom(
-            minimumSize: const Size(0, 48),
-            selectedBackgroundColor: AppColors.infoBg,
-            selectedForegroundColor: AppColors.info,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+          style: TextStyle(
+            fontSize: 19,
+            fontWeight: FontWeight.w800,
+            color: darkText,
           ),
         ),
+        const SizedBox(height: 10),
+        _buildDateBar(),
         const SizedBox(height: 12),
         Container(
           decoration: const BoxDecoration(
             color: Colors.white,
-            border: Border.symmetric(horizontal: BorderSide(color: AppColors.line)),
+            border: Border.symmetric(
+              horizontal: BorderSide(color: AppColors.line),
+            ),
           ),
           padding: const EdgeInsets.symmetric(vertical: 16),
           child: Row(
             children: [
-              _StatNumber(value: show(stat?.exits), label: 'Salidas', icon: Icons.logout_rounded),
+              _StatNumber(
+                value: exits == null ? '—' : '$exits',
+                label: 'Salidas',
+                icon: Icons.logout_rounded,
+              ),
               Container(width: 1, height: 52, color: AppColors.line),
               _StatNumber(
-                value: show(stat?.minutes),
-                label: 'Minutos fuera',
+                value: minutes == null ? '—' : _formatMinutes(minutes),
+                label: 'Tiempo fuera',
                 icon: Icons.timer_outlined,
               ),
             ],
           ),
         ),
+        if (exits == 0)
+          const Padding(
+            padding: EdgeInsets.only(top: 10),
+            child: Text(
+              'No saliste en esta fecha.',
+              textAlign: TextAlign.center,
+              style: TextStyle(fontSize: 14, color: Colors.black54),
+            ),
+          ),
+      ],
+    );
+  }
+
+  /// Selector de fecha: flechas para ir día a día y toque central para
+  /// abrir el calendario (un día o un rango).
+  Widget _buildDateBar() {
+    final range = _range;
+    final canGoNext = range != null && _isSingleDay(range);
+    final canGoPrev = range == null || _isSingleDay(range);
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Container(
+          decoration: BoxDecoration(
+            color: Colors.white,
+            border: Border.all(color: AppColors.line),
+            borderRadius: BorderRadius.circular(6),
+          ),
+          child: Row(
+            children: [
+              IconButton(
+                tooltip: 'Día anterior',
+                onPressed: canGoPrev ? () => _shiftDay(-1) : null,
+                icon: const Icon(Icons.chevron_left_rounded, size: 30),
+              ),
+              Expanded(
+                child: Tooltip(
+                  message: 'Elegir fecha',
+                  child: InkWell(
+                    onTap: _pickRange,
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 10),
+                      child: Column(
+                        children: [
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              const Icon(
+                                Icons.calendar_month_rounded,
+                                size: 20,
+                                color: AppColors.info,
+                              ),
+                              const SizedBox(width: 8),
+                              Flexible(
+                                child: Text(
+                                  _rangeTitle(),
+                                  overflow: TextOverflow.ellipsis,
+                                  style: const TextStyle(
+                                    fontSize: 17,
+                                    fontWeight: FontWeight.w800,
+                                    color: darkText,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                          const Text(
+                            'Toca para elegir otra fecha',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: Colors.black54,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+              IconButton(
+                tooltip: 'Día siguiente',
+                onPressed: canGoNext ? () => _shiftDay(1) : null,
+                icon: const Icon(Icons.chevron_right_rounded, size: 30),
+              ),
+            ],
+          ),
+        ),
+        if (range != null)
+          Align(
+            alignment: Alignment.centerRight,
+            child: TextButton.icon(
+              onPressed: _clearRange,
+              icon: const Icon(Icons.today_rounded, size: 18),
+              label: const Text('Volver a hoy'),
+              style: TextButton.styleFrom(foregroundColor: AppColors.info),
+            ),
+          ),
       ],
     );
   }
@@ -607,7 +826,11 @@ class _StatNumber extends StatelessWidget {
   final String label;
   final IconData icon;
 
-  const _StatNumber({required this.value, required this.label, required this.icon});
+  const _StatNumber({
+    required this.value,
+    required this.label,
+    required this.icon,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -619,18 +842,26 @@ class _StatNumber extends StatelessWidget {
             children: [
               Icon(icon, size: 22, color: Colors.black54),
               const SizedBox(width: 6),
-              Text(
-                value,
-                style: const TextStyle(
-                  fontSize: 32,
-                  fontWeight: FontWeight.w800,
-                  color: AppColors.darkText,
+              Flexible(
+                child: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: Text(
+                    value,
+                    style: const TextStyle(
+                      fontSize: 32,
+                      fontWeight: FontWeight.w800,
+                      color: AppColors.darkText,
+                    ),
+                  ),
                 ),
               ),
             ],
           ),
           const SizedBox(height: 2),
-          Text(label, style: const TextStyle(fontSize: 14, color: Colors.black54)),
+          Text(
+            label,
+            style: const TextStyle(fontSize: 14, color: Colors.black54),
+          ),
         ],
       ),
     );
@@ -659,7 +890,8 @@ class _Avatar extends StatelessWidget {
         height: 60,
         fit: BoxFit.cover,
         errorBuilder: (_, _, _) => fallback,
-        loadingBuilder: (_, child, progress) => progress == null ? child : fallback,
+        loadingBuilder: (_, child, progress) =>
+            progress == null ? child : fallback,
       ),
     );
   }

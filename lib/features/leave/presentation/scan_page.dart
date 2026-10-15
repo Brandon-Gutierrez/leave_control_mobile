@@ -3,6 +3,7 @@ import 'package:mobile_scanner/mobile_scanner.dart';
 
 import '../../../core/location/location_service.dart';
 import '../../../core/network/api_exceptions.dart';
+import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_text_styles.dart';
 import '../../../core/widgets/app_popup.dart';
 import '../../auth/presentation/login_page.dart';
@@ -26,8 +27,8 @@ class _ScanPageState extends State<ScanPage> {
   bool _isProcessing = false;
 
   // Paleta
-  static const primaryRed = Color(0xFFD32F2F);
-  static const darkText = Color(0xFF111111);
+  static const primaryRed = AppColors.primaryRed;
+  static const darkText = AppColors.darkText;
 
   @override
   void dispose() {
@@ -39,25 +40,25 @@ class _ScanPageState extends State<ScanPage> {
     if (_isProcessing) return;
 
     final List<Barcode> barcodes = capture.barcodes;
-    if (barcodes.isEmpty || barcodes.first.rawValue == null)  return;
+    if (barcodes.isEmpty || barcodes.first.rawValue == null) return;
 
     final String qrData = barcodes.first.rawValue!;
 
-    void handleError(String message){
+    void handleError(String message) {
       showErrorPopup(context, message);
       _scannerController.start();
-      setState((){
+      setState(() {
         _isProcessing = false;
       });
     }
 
-    setState((){
+    setState(() {
       _isProcessing = true;
     });
 
     await _scannerController.stop();
 
-    try{
+    try {
       final scan = await _leaveService.scanQr(qrData);
       if (!mounted) return;
 
@@ -70,7 +71,9 @@ class _ScanPageState extends State<ScanPage> {
         final leaveTicket = scan.leaveTicket;
         final ticketExpiresAt = scan.leaveTicketExpiresAt;
         if (leaveTicket == null || leaveTicket.isEmpty) {
-          handleError('No se pudo iniciar la selección de motivo. Vuelva a escanear.');
+          handleError(
+            'No se pudo iniciar la selección de motivo. Vuelva a escanear.',
+          );
           return;
         }
         Navigator.pushReplacement(
@@ -150,7 +153,9 @@ class _ScanPageState extends State<ScanPage> {
                       : Icons.flash_off_rounded,
                   color: Colors.white,
                 ),
-                onPressed: state.isInitialized ? () => _scannerController.toggleTorch() : null,
+                onPressed: state.isInitialized
+                    ? () => _scannerController.toggleTorch()
+                    : null,
               );
             },
           ),
@@ -159,8 +164,13 @@ class _ScanPageState extends State<ScanPage> {
             valueListenable: _scannerController,
             builder: (context, state, child) {
               return IconButton(
-                icon: const Icon(Icons.cameraswitch_rounded, color: Colors.white),
-                onPressed: state.isInitialized ? () => _scannerController.switchCamera() : null,
+                icon: const Icon(
+                  Icons.cameraswitch_rounded,
+                  color: Colors.white,
+                ),
+                onPressed: state.isInitialized
+                    ? () => _scannerController.switchCamera()
+                    : null,
               );
             },
           ),
@@ -169,7 +179,6 @@ class _ScanPageState extends State<ScanPage> {
       body: ValueListenableBuilder<MobileScannerState>(
         valueListenable: _scannerController,
         builder: (context, state, child) {
-          
           return Stack(
             fit: StackFit.expand,
             children: [
@@ -184,15 +193,12 @@ class _ScanPageState extends State<ScanPage> {
                   width: frameSize,
                   height: frameSize,
                   decoration: BoxDecoration(
-                    border: Border.all(
-                      color: primaryRed,
-                      width: 3,
-                    ),
+                    border: Border.all(color: primaryRed, width: 3),
                     borderRadius: BorderRadius.circular(20),
                   ),
                 ),
               ),
-              
+
               //ESTADO DE LA CAMARA
               if (state.error != null)
                 _buildCameraError(state.error!)
@@ -207,9 +213,7 @@ class _ScanPageState extends State<ScanPage> {
                     child: Column(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        CircularProgressIndicator(
-                          color: Colors.white,
-                        ),
+                        CircularProgressIndicator(color: Colors.white),
                         SizedBox(height: 16),
                         Text(
                           'Verificando ubicación y código...',
@@ -223,40 +227,38 @@ class _ScanPageState extends State<ScanPage> {
                     ),
                   ),
                 ),
-              
+
               //TEXTO INFERIOR
               if (!_isProcessing && state.isInitialized)
-              Positioned(
-                bottom: mediaQuery.padding.bottom + 32,
-                left: 20,
-                right: 20,
-                child: Center(
-                  child: ConstrainedBox(
-                    constraints: const BoxConstraints(
-                      maxHeight: 420,
-                    ),
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                        vertical: 12,
-                        horizontal: 16,
-                      ),
-                      decoration: BoxDecoration(
-                        color: Colors.black.withValues(alpha: 0.7),
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                      child: const Text(
-                        'Apunta el código QR dentro del marco',
-                        textAlign: TextAlign.center,
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontSize: 13,
-                          fontWeight: FontWeight.w500,
+                Positioned(
+                  bottom: mediaQuery.padding.bottom + 32,
+                  left: 20,
+                  right: 20,
+                  child: Center(
+                    child: ConstrainedBox(
+                      constraints: const BoxConstraints(maxHeight: 420),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                          vertical: 12,
+                          horizontal: 16,
                         ),
-                      )
+                        decoration: BoxDecoration(
+                          color: Colors.black.withValues(alpha: 0.7),
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: const Text(
+                          'Apunta el código QR dentro del marco',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 13,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ),
                     ),
                   ),
                 ),
-              )
             ],
           );
         },
@@ -273,7 +275,11 @@ class _ScanPageState extends State<ScanPage> {
           SizedBox(height: 20),
           Text(
             'Iniciando cámara...',
-            style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w600),
+            style: TextStyle(
+              color: Colors.white,
+              fontSize: 16,
+              fontWeight: FontWeight.w600,
+            ),
           ),
         ],
       ),
@@ -281,7 +287,8 @@ class _ScanPageState extends State<ScanPage> {
   }
 
   Widget _buildCameraError(MobileScannerException error) {
-    final isPermission = error.errorCode == MobileScannerErrorCode.permissionDenied;
+    final isPermission =
+        error.errorCode == MobileScannerErrorCode.permissionDenied;
     return Center(
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 32),
@@ -289,7 +296,9 @@ class _ScanPageState extends State<ScanPage> {
           mainAxisSize: MainAxisSize.min,
           children: [
             Icon(
-              isPermission ? Icons.no_photography_rounded : Icons.error_outline_rounded,
+              isPermission
+                  ? Icons.no_photography_rounded
+                  : Icons.error_outline_rounded,
               color: Colors.white,
               size: 48,
             ),
@@ -299,7 +308,11 @@ class _ScanPageState extends State<ScanPage> {
                   ? 'Necesitamos permiso de la cámara para escanear el código QR.'
                   : 'No se pudo iniciar la cámara.',
               textAlign: TextAlign.center,
-              style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w600),
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 16,
+                fontWeight: FontWeight.w600,
+              ),
             ),
             const SizedBox(height: 8),
             Text(

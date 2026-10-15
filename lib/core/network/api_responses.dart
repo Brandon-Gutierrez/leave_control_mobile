@@ -28,8 +28,7 @@ abstract final class ApiResponses {
     final message = switch (e.type) {
       DioExceptionType.connectionTimeout ||
       DioExceptionType.sendTimeout ||
-      DioExceptionType.receiveTimeout =>
-        'La conexión tardó demasiado. Verifica tu internet e intenta nuevamente.',
+      DioExceptionType.receiveTimeout => 'La conexión tardó demasiado. Verifica tu internet e intenta nuevamente.',
       DioExceptionType.connectionError =>
         'No hay conexión a internet. Verifica tu red e intenta nuevamente.',
       _ => 'No se pudo completar la solicitud. Intenta nuevamente.',

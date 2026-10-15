@@ -57,21 +57,32 @@ void main() {
     api = AuthService();
   });
 
-  _FakeAdapter respond(int status, String body, {String contentType = 'application/json'}) {
+  _FakeAdapter respond(
+    int status,
+    String body, {
+    String contentType = 'application/json',
+  }) {
     final adapter = _FakeAdapter(status, body, contentType: contentType);
     ApiClient().dio.httpClientAdapter = adapter;
     return adapter;
   }
 
   group('login', () {
-    test('solo un 401 del servidor se muestra como credenciales incorrectas', () async {
-      respond(401, '{"status":"ERROR","message":"Credenciales inválidas."}');
+    test(
+      'solo un 401 del servidor se muestra como credenciales incorrectas',
+      () async {
+        respond(401, '{"status":"ERROR","message":"Credenciales inválidas."}');
 
-      expect(await api.login('juan', 'mala'), 'Credenciales inválidas.');
-    });
+        expect(await api.login('juan', 'mala'), 'Credenciales inválidas.');
+      },
+    );
 
     test('una respuesta que no es del sistema (túnel apagado) no culpa a las credenciales', () async {
-      respond(404, 'The endpoint x.ngrok-free.dev is offline.', contentType: 'text/plain');
+      respond(
+        404,
+        'The endpoint x.ngrok-free.dev is offline.',
+        contentType: 'text/plain',
+      );
 
       final message = await api.login('juan', 'ok');
 
@@ -79,20 +90,32 @@ void main() {
       expect(message, isNot(contains('Credenciales')));
     });
 
-    test('otro teléfono muestra el aviso de Recursos Humanos del servidor', () async {
-      respond(403, '{"code":"DEVICE_NOT_AUTHORIZED","message":"Esta cuenta ya está vinculada a otro teléfono. Contacte a Recursos Humanos."}');
+    test(
+      'otro teléfono muestra el aviso de Recursos Humanos del servidor',
+      () async {
+        respond(
+          403,
+          '{"code":"DEVICE_NOT_AUTHORIZED","message":"Esta cuenta ya está vinculada a otro teléfono. Contacte a Recursos Humanos."}',
+        );
 
-      expect(await api.login('juan', 'ok'), contains('Recursos Humanos'));
-    });
+        expect(await api.login('juan', 'ok'), contains('Recursos Humanos'));
+      },
+    );
 
     test('un error 5xx con mensaje del servidor se muestra tal cual', () async {
-      respond(502, '{"message":"Un servicio necesario no está disponible temporalmente."}');
+      respond(
+        502,
+        '{"message":"Un servicio necesario no está disponible temporalmente."}',
+      );
 
       expect(await api.login('juan', 'ok'), contains('no está disponible'));
     });
 
     test('login correcto envía la aplicación y un identificador estable del teléfono', () async {
-      final adapter = respond(200, '{"user":{"name":"Juan","item":1,"external_identifier":"t"}}');
+      final adapter = respond(
+        200,
+        '{"user":{"name":"Juan","item":1,"external_identifier":"t"}}',
+      );
 
       expect(await api.login('juan', 'ok'), isNull);
 
@@ -112,10 +135,13 @@ void main() {
       expect(await api.hasActiveSession(), isTrue);
     });
 
-    test('401 (sesión cerrada o dispositivo desvinculado) pide iniciar sesión', () async {
-      respond(401, '{"code":"DEVICE_NOT_AUTHORIZED","message":"..."}');
-      expect(await api.hasActiveSession(), isFalse);
-    });
+    test(
+      '401 (sesión cerrada o dispositivo desvinculado) pide iniciar sesión',
+      () async {
+        respond(401, '{"code":"DEVICE_NOT_AUTHORIZED","message":"..."}');
+        expect(await api.hasActiveSession(), isFalse);
+      },
+    );
 
     test('un servidor caído no se confunde con una sesión inválida', () async {
       respond(503, 'Service Unavailable', contentType: 'text/plain');
