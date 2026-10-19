@@ -108,6 +108,12 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     }
   }
 
+  /// Sin rango: las del último mes. Con rango: solo las de esas fechas
+  /// (hoy nunca se advierte, porque aún puede marcar su retorno).
+  List<UnreturnedLeave> get _visibleUnreturned => _range != null
+      ? (_rangeStat?.unreturnedLeaves ?? const [])
+      : _unreturnedLeaves;
+
   static DateTime _dateOnly(DateTime d) => DateTime(d.year, d.month, d.day);
 
   static bool _isSingleDay(DateTimeRange r) =>
@@ -415,7 +421,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
                     _buildScanButton(),
                     const SizedBox(height: 28),
                     _buildStats(),
-                    if (_unreturnedLeaves.isNotEmpty) ...[
+                    if (_visibleUnreturned.isNotEmpty) ...[
                       const SizedBox(height: 24),
                       _buildUnreturnedWarnings(),
                     ],
@@ -587,7 +593,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        for (final leave in _unreturnedLeaves)
+        for (final leave in _visibleUnreturned)
           Container(
             margin: const EdgeInsets.only(bottom: 10),
             padding: const EdgeInsets.all(14),

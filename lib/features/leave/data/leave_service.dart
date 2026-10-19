@@ -82,6 +82,7 @@ class LeaveService {
     return LeaveStat(
       (range['exits'] as num?)?.toInt(),
       (range['minutes'] as num?)?.toInt(),
+      UnreturnedLeave.listFromJson(range['unreturned_leaves']),
     );
   }
 

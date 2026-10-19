@@ -249,6 +249,45 @@ void main() {
     await _tearDownTimers(tester);
   });
 
+  testWidgets('Las salidas sin retorno siguen el rango elegido', (
+    tester,
+  ) async {
+    final api = _FakeLeaveService(
+      leaveStatusResponse: {
+        'name': 'Juan Pérez',
+        'isLeave': false,
+        'unreturned_leaves': [
+          {'date': '2026-09-10T09:00:00', 'reason': 'Trámite bancario'},
+        ],
+      },
+    );
+    await tester.pumpWidget(MaterialApp(home: HomePage(leaveService: api)));
+    await _settle(tester);
+
+    // Sin rango: se advierten las del último mes.
+    expect(find.text('Salida sin retorno'), findsOneWidget);
+
+    // Un rango sin salidas sin retorno: no se muestra ninguna advertencia.
+    api.rangeResponse = const LeaveStat(2, 30);
+    await tester.tap(find.byTooltip('Día anterior'));
+    await tester.pump();
+    await tester.pump();
+    expect(find.text('Salida sin retorno'), findsNothing);
+
+    // Un rango que sí incluye una: aparece solo esa.
+    api.rangeResponse = LeaveStat(1, 20, [
+      UnreturnedLeave(DateTime(2026, 9, 15, 8, 30), 'Cita médica'),
+    ]);
+    await tester.tap(find.byTooltip('Día anterior'));
+    await tester.pump();
+    await tester.pump();
+    expect(find.text('Salida sin retorno'), findsOneWidget);
+    expect(find.textContaining('Cita médica'), findsOneWidget);
+    expect(find.textContaining('Trámite bancario'), findsNothing);
+
+    await _tearDownTimers(tester);
+  });
+
   testWidgets('HomePage navega día a día con las flechas', (tester) async {
     final api = _FakeLeaveService(
       leaveStatusResponse: {'name': 'Juan Pérez', 'isLeave': false},

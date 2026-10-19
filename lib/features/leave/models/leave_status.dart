@@ -3,7 +3,10 @@ class LeaveStat {
   final int? exits;
   final int? minutes;
 
-  const LeaveStat(this.exits, this.minutes);
+  /// Solo en consultas por rango: las salidas sin retorno dentro del rango.
+  final List<UnreturnedLeave> unreturnedLeaves;
+
+  const LeaveStat(this.exits, this.minutes, [this.unreturnedLeaves = const []]);
 }
 
 /// Salida de un día anterior que nunca marcó retorno.
@@ -12,6 +15,16 @@ class UnreturnedLeave {
   final String? reason;
 
   const UnreturnedLeave(this.leftAt, this.reason);
+
+  /// Lee `[{date, reason}]` ignorando entradas con fecha inválida.
+  static List<UnreturnedLeave> listFromJson(dynamic raw) => [
+    for (final item in raw as List? ?? const [])
+      if (item is Map && DateTime.tryParse('${item['date']}') != null)
+        UnreturnedLeave(
+          DateTime.parse('${item['date']}').toLocal(),
+          item['reason']?.toString(),
+        ),
+  ];
 }
 
 /// Datos de la persona y si está fuera en este momento, tal como los entrega
@@ -62,14 +75,7 @@ class LeaveStatus {
       photoUrl: (json['photo_url'] ?? json['photo'] ?? json['avatar'])
           ?.toString(),
       stats: _parseStats(json['stats']),
-      unreturnedLeaves: [
-        for (final raw in json['unreturned_leaves'] as List? ?? const [])
-          if (raw is Map && DateTime.tryParse('${raw['date']}') != null)
-            UnreturnedLeave(
-              DateTime.parse('${raw['date']}').toLocal(),
-              raw['reason']?.toString(),
-            ),
-      ],
+      unreturnedLeaves: UnreturnedLeave.listFromJson(json['unreturned_leaves']),
     );
   }
 
