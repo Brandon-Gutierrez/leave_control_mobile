@@ -256,6 +256,7 @@ void main() {
       leaveStatusResponse: {
         'name': 'Juan Pérez',
         'isLeave': false,
+        // Aunque el servidor enviara salidas viejas, hoy no se advierte nada.
         'unreturned_leaves': [
           {'date': '2026-09-10T09:00:00', 'reason': 'Trámite bancario'},
         ],
@@ -264,8 +265,9 @@ void main() {
     await tester.pumpWidget(MaterialApp(home: HomePage(leaveService: api)));
     await _settle(tester);
 
-    // Sin rango: se advierten las del último mes.
-    expect(find.text('Salida sin retorno'), findsOneWidget);
+    // Vista de hoy: sin advertencias de otras fechas.
+    expect(find.text('Salida sin retorno'), findsNothing);
+    expect(find.textContaining('Trámite bancario'), findsNothing);
 
     // Un rango sin salidas sin retorno: no se muestra ninguna advertencia.
     api.rangeResponse = const LeaveStat(2, 30);

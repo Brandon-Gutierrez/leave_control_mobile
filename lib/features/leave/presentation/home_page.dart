@@ -38,7 +38,6 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   DateTimeRange? _range;
   LeaveStat? _rangeStat;
   bool _rangeLoading = false;
-  List<UnreturnedLeave> _unreturnedLeaves = [];
 
   bool _isLeave = false;
   bool _isLoading = true;
@@ -99,7 +98,6 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         _jobTitle = status.jobTitle;
         _photoUrl = status.photoUrl;
         _stats = status.stats;
-        _unreturnedLeaves = status.unreturnedLeaves;
       });
       _initTimer();
       if (_range != null) unawaited(_loadRange(_range!));
@@ -108,11 +106,10 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     }
   }
 
-  /// Sin rango: las del último mes. Con rango: solo las de esas fechas
-  /// (hoy nunca se advierte, porque aún puede marcar su retorno).
-  List<UnreturnedLeave> get _visibleUnreturned => _range != null
-      ? (_rangeStat?.unreturnedLeaves ?? const [])
-      : _unreturnedLeaves;
+  /// Solo con un rango elegido y únicamente las de esas fechas. En la vista
+  /// de hoy no hay advertencias, porque aún puede marcar su retorno.
+  List<UnreturnedLeave> get _visibleUnreturned =>
+      _range != null ? (_rangeStat?.unreturnedLeaves ?? const []) : const [];
 
   static DateTime _dateOnly(DateTime d) => DateTime(d.year, d.month, d.day);
 
@@ -588,7 +585,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     );
   }
 
-  /// Una advertencia por cada salida del último mes que no marcó retorno.
+  /// Una advertencia por cada salida del rango elegido que no marcó retorno.
   Widget _buildUnreturnedWarnings() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,

@@ -49,9 +49,6 @@ class LeaveStatus {
   /// Estadísticas por período: `day`, `week` y `month`.
   final Map<String, LeaveStat> stats;
 
-  /// Salidas del último mes sin retorno (no se cuentan en las estadísticas).
-  final List<UnreturnedLeave> unreturnedLeaves;
-
   const LeaveStatus({
     required this.name,
     required this.isLeave,
@@ -61,7 +58,6 @@ class LeaveStatus {
     required this.jobTitle,
     required this.photoUrl,
     required this.stats,
-    this.unreturnedLeaves = const [],
   });
 
   factory LeaveStatus.fromJson(Map<String, dynamic> json) {
@@ -75,7 +71,6 @@ class LeaveStatus {
       photoUrl: (json['photo_url'] ?? json['photo'] ?? json['avatar'])
           ?.toString(),
       stats: _parseStats(json['stats']),
-      unreturnedLeaves: UnreturnedLeave.listFromJson(json['unreturned_leaves']),
     );
   }
 
