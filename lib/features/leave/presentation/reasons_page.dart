@@ -5,7 +5,6 @@ import 'package:flutter/material.dart';
 import '../../../core/location/location_service.dart';
 import '../../../core/network/api_exceptions.dart';
 import '../../../core/theme/app_colors.dart';
-import '../../../core/theme/app_text_styles.dart';
 import '../../../core/widgets/app_popup.dart';
 import '../../auth/presentation/login_page.dart';
 import '../data/leave_service.dart';
@@ -118,10 +117,6 @@ class _ReasonsPageState extends State<ReasonsPage> {
           _errorMessage = 'No se pudieron cargar los motivos de salida';
         } else {
           _reasons = data;
-          // Un motivo elegido antes de recargar puede haber quedado bloqueado.
-          if (data.any((r) => r.name == _selectedReason && r.isBlocked)) {
-            _selectedReason = null;
-          }
         }
         _isLoading = false;
       });
@@ -140,17 +135,19 @@ class _ReasonsPageState extends State<ReasonsPage> {
     );
   }
 
-  Future<void> _confirmSelection() async {
-    if (_selectedReason == null || _isSubmitting) return;
+  /// Tocar un motivo registra la salida de inmediato, sin otro botón.
+  Future<void> _confirmSelection(String reason) async {
+    if (_isSubmitting) return;
 
     setState(() {
+      _selectedReason = reason;
       _isSubmitting = true;
     });
 
     try {
       await _leaveService.confirmLeave(
         _namePremise,
-        _selectedReason!,
+        reason,
         widget.leaveTicket,
       );
 
@@ -238,7 +235,6 @@ class _ReasonsPageState extends State<ReasonsPage> {
           child: _buildBody(),
         ),
       ),
-      bottomNavigationBar: _buildBottomAction(),
     );
   }
 
@@ -354,7 +350,7 @@ class _ReasonsPageState extends State<ReasonsPage> {
           ),
           children: [
             Text(
-              'Selecciona la razón de tu salida',
+              'Toca el motivo de tu salida para registrarla',
               style: TextStyle(
                 fontSize: 16,
                 fontWeight: FontWeight.w600,
@@ -371,7 +367,9 @@ class _ReasonsPageState extends State<ReasonsPage> {
 
   Widget _buildReasonTile(LeaveReasonOption option) {
     final blocked = option.isBlocked;
-    final isSelected = !blocked && _selectedReason == option.name;
+    // El motivo tocado, mientras se registra la salida.
+    final isSelected =
+        !blocked && _isSubmitting && _selectedReason == option.name;
 
     return Padding(
       padding: const EdgeInsets.only(bottom: 12.0),
@@ -380,14 +378,11 @@ class _ReasonsPageState extends State<ReasonsPage> {
         borderRadius: BorderRadius.circular(12),
         child: InkWell(
           borderRadius: BorderRadius.circular(12),
-          // Un motivo que llegó a su límite no se puede elegir.
-          onTap: blocked
+          // Un motivo que llegó a su límite no se puede elegir; mientras se
+          // registra una salida tampoco se puede tocar otro.
+          onTap: blocked || _isSubmitting
               ? null
-              : () {
-                  setState(() {
-                    _selectedReason = option.name;
-                  });
-                },
+              : () => _confirmSelection(option.name),
           child: AnimatedContainer(
             duration: const Duration(milliseconds: 180),
             padding: const EdgeInsets.symmetric(
@@ -403,20 +398,6 @@ class _ReasonsPageState extends State<ReasonsPage> {
             ),
             child: Row(
               children: [
-                Icon(
-                  blocked
-                      ? Icons.block_rounded
-                      : isSelected
-                      ? Icons.radio_button_checked_rounded
-                      : Icons.radio_button_off_rounded,
-                  color: blocked
-                      ? AppColors.danger
-                      : isSelected
-                      ? primaryRed
-                      : Colors.grey.shade400,
-                  size: 22,
-                ),
-                const SizedBox(width: 14),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -450,6 +431,24 @@ class _ReasonsPageState extends State<ReasonsPage> {
                     ],
                   ),
                 ),
+                const SizedBox(width: 12),
+                if (isSelected)
+                  const SizedBox(
+                    height: 20,
+                    width: 20,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: primaryRed,
+                    ),
+                  )
+                else
+                  Icon(
+                    blocked
+                        ? Icons.block_rounded
+                        : Icons.chevron_right_rounded,
+                    color: blocked ? AppColors.danger : Colors.grey.shade500,
+                    size: 24,
+                  ),
               ],
             ),
           ),
@@ -458,61 +457,4 @@ class _ReasonsPageState extends State<ReasonsPage> {
     );
   }
 
-  Widget _buildBottomAction() {
-    final isSmallPhone = MediaQuery.sizeOf(context).width < 360;
-
-    return Container(
-      color: lightBg,
-      child: SafeArea(
-        top: false,
-        child: Padding(
-          padding: EdgeInsets.symmetric(
-            horizontal: isSmallPhone ? 16.0 : 28.0,
-            vertical: isSmallPhone ? 16.0 : 20.0,
-          ),
-          child: Center(
-            heightFactor: 1,
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 520),
-              child: SizedBox(
-                height: AppDimens.buttonHeight,
-                width: double.infinity,
-                child: ElevatedButton(
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: primaryRed,
-                    foregroundColor: Colors.white,
-                    disabledBackgroundColor: Colors.grey.shade300,
-                    disabledForegroundColor: Colors.grey.shade500,
-                    elevation: 0,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                  ),
-                  onPressed: _selectedReason != null && !_isSubmitting
-                      ? _confirmSelection
-                      : null,
-                  child: _isSubmitting
-                      ? const SizedBox(
-                          height: 20,
-                          width: 20,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            color: Colors.white,
-                          ),
-                        )
-                      : const Text(
-                          'Confirmar Selección',
-                          style: TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                ),
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
 }

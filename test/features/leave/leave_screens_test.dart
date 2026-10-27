@@ -50,12 +50,19 @@ class _FakeLeaveService implements LeaveService {
   Future<List<LeaveReasonOption>?> getReasons(String namePremise) async =>
       reasonsResponse;
 
+  /// Motivo con el que se pidió registrar la salida, y error a simular.
+  String? confirmedReason;
+  ApiRequestException? confirmError;
+
   @override
   Future<void> confirmLeave(
     String namePremise,
     String nameReason,
     String qrData,
-  ) async {}
+  ) async {
+    confirmedReason = nameReason;
+    if (confirmError != null) throw confirmError!;
+  }
 
   @override
   Future<QrScanResult> scanQr(String qrData) async => const QrScanResult(
@@ -168,12 +175,45 @@ void main() {
       await _settle(tester);
 
       expect(tester.takeException(), isNull);
-      expect(find.text('Confirmar Selección'), findsOneWidget);
       expect(find.text('Trámite bancario'), findsOneWidget);
+      expect(find.text('Cita médica'), findsOneWidget);
+      // Ya no hay botón de confirmar: tocar el motivo registra la salida.
+      expect(find.text('Confirmar Selección'), findsNothing);
 
       await _tearDownTimers(tester);
     });
   }
+
+  testWidgets('ReasonsPage: tocar un motivo registra la salida directamente', (
+    tester,
+  ) async {
+    final api = _FakeLeaveService(
+      reasonsResponse: const [
+        LeaveReasonOption('Trámite bancario'),
+        LeaveReasonOption('Cita médica'),
+      ],
+    )..confirmError = ApiRequestException('Sin conexión'); // se queda en la pantalla
+    await tester.pumpWidget(
+      MaterialApp(
+        home: ReasonsPage(
+          qrData: 'Predio Central+uuid',
+          leaveTicket: 'ticket-uuid',
+          leaveService: api,
+        ),
+      ),
+    );
+    await _settle(tester);
+
+    await tester.tap(find.text('Cita médica'));
+    await tester.pump();
+    await tester.pump();
+
+    expect(api.confirmedReason, 'Cita médica');
+    // Si falla, se puede volver a tocar un motivo.
+    expect(find.text('Cita médica'), findsOneWidget);
+
+    await _tearDownTimers(tester);
+  });
 
   testWidgets('ReasonsPage no deja elegir un motivo que llegó a su límite', (
     tester,
@@ -199,15 +239,17 @@ void main() {
 
     expect(find.text('Límite alcanzado: 1 vez por día'), findsOneWidget);
 
-    // Tocar el motivo agotado no habilita el botón de confirmar.
-    final confirm = find.widgetWithText(ElevatedButton, 'Confirmar Selección');
+    // Tocar el motivo agotado no registra nada; el otro sí.
+    api.confirmError = ApiRequestException('Sin conexión');
     await tester.tap(find.text('Almuerzo'));
     await tester.pump();
-    expect(tester.widget<ElevatedButton>(confirm).onPressed, isNull);
+    await tester.pump();
+    expect(api.confirmedReason, isNull);
 
     await tester.tap(find.text('Cita médica'));
     await tester.pump();
-    expect(tester.widget<ElevatedButton>(confirm).onPressed, isNotNull);
+    await tester.pump();
+    expect(api.confirmedReason, 'Cita médica');
 
     await _tearDownTimers(tester);
   });
