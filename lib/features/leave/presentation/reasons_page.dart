@@ -9,6 +9,7 @@ import '../../../core/theme/app_text_styles.dart';
 import '../../../core/widgets/app_popup.dart';
 import '../../auth/presentation/login_page.dart';
 import '../data/leave_service.dart';
+import '../models/leave_reason.dart';
 import 'home_page.dart';
 
 class ReasonsPage extends StatefulWidget {
@@ -45,7 +46,7 @@ class _ReasonsPageState extends State<ReasonsPage> {
   bool _isLoading = true;
   bool _isSubmitting = false;
   String? _errorMessage;
-  List<String> _reasons = [];
+  List<LeaveReasonOption> _reasons = [];
 
   Timer? _countdownTimer;
   int? _secondsLeft;
@@ -117,6 +118,10 @@ class _ReasonsPageState extends State<ReasonsPage> {
           _errorMessage = 'No se pudieron cargar los motivos de salida';
         } else {
           _reasons = data;
+          // Un motivo elegido antes de recargar puede haber quedado bloqueado.
+          if (data.any((r) => r.name == _selectedReason && r.isBlocked)) {
+            _selectedReason = null;
+          }
         }
         _isLoading = false;
       });
@@ -364,21 +369,25 @@ class _ReasonsPageState extends State<ReasonsPage> {
     );
   }
 
-  Widget _buildReasonTile(String reason) {
-    final isSelected = _selectedReason == reason;
+  Widget _buildReasonTile(LeaveReasonOption option) {
+    final blocked = option.isBlocked;
+    final isSelected = !blocked && _selectedReason == option.name;
 
     return Padding(
       padding: const EdgeInsets.only(bottom: 12.0),
       child: Material(
-        color: Colors.white,
+        color: blocked ? Colors.grey.shade100 : Colors.white,
         borderRadius: BorderRadius.circular(12),
         child: InkWell(
           borderRadius: BorderRadius.circular(12),
-          onTap: () {
-            setState(() {
-              _selectedReason = reason;
-            });
-          },
+          // Un motivo que llegó a su límite no se puede elegir.
+          onTap: blocked
+              ? null
+              : () {
+                  setState(() {
+                    _selectedReason = option.name;
+                  });
+                },
           child: AnimatedContainer(
             duration: const Duration(milliseconds: 180),
             padding: const EdgeInsets.symmetric(
@@ -395,23 +404,50 @@ class _ReasonsPageState extends State<ReasonsPage> {
             child: Row(
               children: [
                 Icon(
-                  isSelected
+                  blocked
+                      ? Icons.block_rounded
+                      : isSelected
                       ? Icons.radio_button_checked_rounded
                       : Icons.radio_button_off_rounded,
-                  color: isSelected ? primaryRed : Colors.grey.shade400,
+                  color: blocked
+                      ? AppColors.danger
+                      : isSelected
+                      ? primaryRed
+                      : Colors.grey.shade400,
                   size: 22,
                 ),
                 const SizedBox(width: 14),
                 Expanded(
-                  child: Text(
-                    reason,
-                    style: TextStyle(
-                      fontSize: 16,
-                      fontWeight: isSelected
-                          ? FontWeight.bold
-                          : FontWeight.w500,
-                      color: isSelected ? darkText : Colors.grey.shade800,
-                    ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        option.name,
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: isSelected
+                              ? FontWeight.bold
+                              : FontWeight.w500,
+                          color: blocked
+                              ? Colors.grey.shade600
+                              : isSelected
+                              ? darkText
+                              : Colors.grey.shade800,
+                        ),
+                      ),
+                      if (blocked)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 2),
+                          child: Text(
+                            option.blockedNote!,
+                            style: const TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600,
+                              color: AppColors.danger,
+                            ),
+                          ),
+                        ),
+                    ],
                   ),
                 ),
               ],

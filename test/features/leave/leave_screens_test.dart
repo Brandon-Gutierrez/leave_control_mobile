@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:control_input_output/core/network/api_exceptions.dart';
 import 'package:control_input_output/features/auth/presentation/login_page.dart';
 import 'package:control_input_output/features/leave/data/leave_service.dart';
+import 'package:control_input_output/features/leave/models/leave_reason.dart';
 import 'package:control_input_output/features/leave/models/leave_status.dart';
 import 'package:control_input_output/features/leave/models/qr_scan_result.dart';
 import 'package:control_input_output/features/leave/presentation/date_range_sheet.dart';
@@ -26,7 +27,7 @@ const _phoneSizes = <String, Size>{
 /// así las pantallas se pueden probar de forma instantánea y determinista.
 class _FakeLeaveService implements LeaveService {
   Map<String, dynamic>? leaveStatusResponse;
-  List<String>? reasonsResponse;
+  List<LeaveReasonOption>? reasonsResponse;
 
   _FakeLeaveService({this.leaveStatusResponse, this.reasonsResponse});
 
@@ -46,7 +47,8 @@ class _FakeLeaveService implements LeaveService {
   }
 
   @override
-  Future<List<String>?> getReasons(String namePremise) async => reasonsResponse;
+  Future<List<LeaveReasonOption>?> getReasons(String namePremise) async =>
+      reasonsResponse;
 
   @override
   Future<void> confirmLeave(
@@ -149,7 +151,10 @@ void main() {
       addTearDown(tester.view.reset);
 
       final api = _FakeLeaveService(
-        reasonsResponse: ['Trámite bancario', 'Cita médica'],
+        reasonsResponse: const [
+          LeaveReasonOption('Trámite bancario'),
+          LeaveReasonOption('Cita médica'),
+        ],
       );
       await tester.pumpWidget(
         MaterialApp(
@@ -169,6 +174,63 @@ void main() {
       await _tearDownTimers(tester);
     });
   }
+
+  testWidgets('ReasonsPage no deja elegir un motivo que llegó a su límite', (
+    tester,
+  ) async {
+    final api = _FakeLeaveService(
+      reasonsResponse: LeaveReasonOption.listFromJson({
+        'reasons': ['Almuerzo', 'Cita médica'],
+        'blocked_reasons': [
+          {'name': 'Almuerzo', 'limit': 1, 'used': 1, 'period': 'day'},
+        ],
+      }),
+    );
+    await tester.pumpWidget(
+      MaterialApp(
+        home: ReasonsPage(
+          qrData: 'Predio Central+uuid',
+          leaveTicket: 'ticket-uuid',
+          leaveService: api,
+        ),
+      ),
+    );
+    await _settle(tester);
+
+    expect(find.text('Límite alcanzado: 1 vez por día'), findsOneWidget);
+
+    // Tocar el motivo agotado no habilita el botón de confirmar.
+    final confirm = find.widgetWithText(ElevatedButton, 'Confirmar Selección');
+    await tester.tap(find.text('Almuerzo'));
+    await tester.pump();
+    expect(tester.widget<ElevatedButton>(confirm).onPressed, isNull);
+
+    await tester.tap(find.text('Cita médica'));
+    await tester.pump();
+    expect(tester.widget<ElevatedButton>(confirm).onPressed, isNotNull);
+
+    await _tearDownTimers(tester);
+  });
+
+  test('LeaveReasonOption lee los motivos y los límites por período', () {
+    final options = LeaveReasonOption.listFromJson({
+      'reasons': ['A', 'B', 'C'],
+      'blocked_reasons': [
+        {'name': 'B', 'limit': 2, 'used': 2, 'period': 'week'},
+        {'name': 'C', 'limit': 1, 'used': 1, 'period': 'month'},
+      ],
+    });
+
+    expect(options.map((o) => o.name), ['A', 'B', 'C']);
+    expect(options[0].isBlocked, isFalse);
+    expect(options[1].blockedNote, 'Límite alcanzado: 2 veces por semana');
+    expect(options[2].blockedNote, 'Límite alcanzado: 1 vez por mes');
+    // Respuesta antigua sin límites: todo disponible.
+    expect(
+      LeaveReasonOption.listFromJson({'reasons': ['A']}).single.isBlocked,
+      isFalse,
+    );
+  });
 
   testWidgets('HomePage nunca muestra una pantalla en blanco mientras carga', (
     tester,
@@ -350,7 +412,7 @@ class _SlowFakeLeaveService implements LeaveService {
   Future<LeaveStat?> fetchRangeStats(DateTime from, DateTime to) async => null;
 
   @override
-  Future<List<String>?> getReasons(String namePremise) async => null;
+  Future<List<LeaveReasonOption>?> getReasons(String namePremise) async => null;
 
   @override
   Future<void> confirmLeave(

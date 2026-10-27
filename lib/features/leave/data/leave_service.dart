@@ -6,6 +6,7 @@ import '../../../core/network/api_client.dart';
 import '../../../core/network/api_exceptions.dart';
 import '../../../core/network/api_responses.dart';
 import '../../../core/storage/storage_service.dart';
+import '../models/leave_reason.dart';
 import '../models/leave_status.dart';
 import '../models/qr_scan_result.dart';
 
@@ -119,7 +120,7 @@ class LeaveService {
   }
 
   //Obtiene las razones de salida de un predio especifico
-  Future<List<String>?> getReasons(String namePremise) async {
+  Future<List<LeaveReasonOption>?> getReasons(String namePremise) async {
     final Response response;
     try {
       response = await _dio.get(
@@ -131,7 +132,10 @@ class LeaveService {
     }
     ApiResponses.throwIfUnauthorized(response);
     if (response.statusCode != 200) return null;
-    return List<String>.from(response.data['reasons'] ?? []);
+    final data = response.data;
+    return data is Map<String, dynamic>
+        ? LeaveReasonOption.listFromJson(data)
+        : <LeaveReasonOption>[];
   }
 
   //Realiza la solicitud de salida del usuario. [leaveTicket] es el
