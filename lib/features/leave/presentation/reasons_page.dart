@@ -396,58 +396,45 @@ class _ReasonsPageState extends State<ReasonsPage> {
                 width: isSelected ? 2.0 : 1.0,
               ),
             ),
-            child: Row(
+            // Botón de solo texto, sin íconos ni círculos.
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        option.name,
-                        style: TextStyle(
-                          fontSize: 16,
-                          fontWeight: isSelected
-                              ? FontWeight.bold
-                              : FontWeight.w500,
-                          color: blocked
-                              ? Colors.grey.shade600
-                              : isSelected
-                              ? darkText
-                              : Colors.grey.shade800,
-                        ),
-                      ),
-                      if (blocked)
-                        Padding(
-                          padding: const EdgeInsets.only(top: 2),
-                          child: Text(
-                            option.blockedNote!,
-                            style: const TextStyle(
-                              fontSize: 13,
-                              fontWeight: FontWeight.w600,
-                              color: AppColors.danger,
-                            ),
-                          ),
-                        ),
-                    ],
+                Text(
+                  option.name,
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: isSelected ? FontWeight.bold : FontWeight.w600,
+                    color: blocked
+                        ? Colors.grey.shade600
+                        : isSelected
+                        ? primaryRed
+                        : darkText,
                   ),
                 ),
-                const SizedBox(width: 12),
+                if (blocked)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 2),
+                    child: Text(
+                      option.blockedNote!,
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                        color: AppColors.danger,
+                      ),
+                    ),
+                  ),
+                // Mientras se registra la salida con este motivo.
                 if (isSelected)
-                  const SizedBox(
-                    height: 20,
-                    width: 20,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2,
+                  const Padding(
+                    padding: EdgeInsets.only(top: 10),
+                    child: LinearProgressIndicator(
+                      minHeight: 3,
                       color: primaryRed,
                     ),
-                  )
-                else
-                  Icon(
-                    blocked
-                        ? Icons.block_rounded
-                        : Icons.chevron_right_rounded,
-                    color: blocked ? AppColors.danger : Colors.grey.shade500,
-                    size: 24,
                   ),
               ],
             ),
@@ -456,5 +443,4 @@ class _ReasonsPageState extends State<ReasonsPage> {
       ),
     );
   }
-
 }
