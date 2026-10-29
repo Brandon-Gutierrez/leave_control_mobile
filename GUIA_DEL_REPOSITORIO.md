@@ -148,17 +148,10 @@ lib/
 | `ios/RunnerTests/RunnerTests.swift` | Target XCTest nativo con un test de ejemplo vacío. | Reemplazar el placeholder por pruebas nativas solo si se añade lógica Swift; evitar mantener tests vacíos como señal engañosa de cobertura. |
 | `ios/.gitignore` | Exclusiones específicas de artefactos iOS/Xcode. | Mantener fuera DerivedData y configuración personal, pero conservar los archivos compartidos necesarios para abrir/build. |
 
-## 7. Web y recursos
-
-La presencia de `web/` permite compilar Flutter Web, pero las capacidades principales dependen de plugins nativos y de cookies; no debe suponerse que QR, almacenamiento y ubicación funcionan igual en navegador sin validación explícita.
+## 7. Recursos
 
 | Archivo(s) | Función y relaciones | Mejora recomendada |
 |---|---|---|
-| `web/index.html` | Documento anfitrión y bootstrap de Flutter Web; define base href, título, descripción, favicon y manifest. | Reemplazar el texto de plantilla, revisar metadatos/CSP y probar rutas de despliegue con base href distinta de `/`. |
-| `web/manifest.json` | Metadatos PWA, colores, modo de visualización y referencias a iconos web. | Ajustar nombre, descripción y colores de marca; confirmar orientación y estrategia PWA según soporte real. |
-| `web/favicon.png` | Favicon del sitio compilado. | Sustituir por identidad visual final y verificar contraste/tamaño en pestaña. |
-| `web/icons/Icon-192.png`, `web/icons/Icon-512.png` | Iconos PWA estándar referenciados desde el manifest. | Regenerar desde un asset maestro y validar instalación/mascarado en navegadores objetivo. |
-| `web/icons/Icon-maskable-192.png`, `web/icons/Icon-maskable-512.png` | Versiones maskable para iconos adaptables del sistema. | Revisar zona segura para que el recorte no oculte el símbolo. |
 | `rsc/comteco.png` | Logo mostrado en SessionGate y en estados de carga de Login/Home; declarado como recurso en `pubspec.yaml`. | Documentar procedencia/licencia corporativa, optimizar dimensiones y centralizar referencia/alternativa accesible en un widget de marca. |
 
 ## 8. Otras configuraciones y archivos locales
