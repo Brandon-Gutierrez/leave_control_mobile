@@ -2,8 +2,15 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+	<key>NSCameraUsageDescription</key>
+	<string>Se usa la cámara para escanear el código QR del predio al registrar una salida o retorno.</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>Se usa tu ubicación para validar que estás dentro del predio al registrar una salida o retorno.</string>
+	<key>NSLocationTemporaryUsageDescriptionDictionary</key>
+	<dict>
+		<key>PremiseValidation</key>
+		<string>Se necesita tu ubicación exacta para validar que estás dentro del predio al registrar una salida o retorno.</string>
+	</dict>
 	<key>CADisableMinimumFrameDurationOnPhone</key>
 	<true/>
 	<key>CFBundleDevelopmentRegion</key>

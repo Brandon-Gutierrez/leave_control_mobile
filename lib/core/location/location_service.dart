@@ -1,4 +1,6 @@
 import 'package:connectivity_plus/connectivity_plus.dart';
+import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 import 'package:geolocator/geolocator.dart';
 
 /// Ubicación capturada con las señales que el servidor usa para validarla.
@@ -46,6 +48,12 @@ class LocationException implements Exception {
 class LocationService {
   static const _timeout = Duration(seconds: 20);
 
+  /// Clave de NSLocationTemporaryUsageDescriptionDictionary (ios/Runner/Info.plist).
+  static const _fullAccuracyPurposeKey = 'PremiseValidation';
+
+  /// iOS no informa de VPN a través de connectivity_plus: se consulta al código nativo.
+  static const _vpnChannel = MethodChannel('control_input_output/vpn');
+
   Future<LocationProof> capture() async {
     if (!await Geolocator.isLocationServiceEnabled()) {
       throw LocationException(
@@ -67,6 +75,8 @@ class LocationService {
         'El permiso de ubicación está bloqueado. Actívalo en los ajustes del teléfono.',
       );
     }
+
+    await _ensurePreciseLocation();
 
     final vpn = await _isVpnActive();
     if (vpn) {
@@ -105,7 +115,37 @@ class LocationService {
     );
   }
 
+  /// En iOS la persona puede conceder solo la ubicación aproximada (cientos de
+  /// metros), que el servidor rechazaría sin explicar por qué: se pide la
+  /// precisa y, si la rechaza, se avisa. En Android siempre es precisa.
+  Future<void> _ensurePreciseLocation() async {
+    try {
+      if (await Geolocator.getLocationAccuracy() == LocationAccuracyStatus.precise) {
+        return;
+      }
+      final granted = await Geolocator.requestTemporaryFullAccuracy(
+        purposeKey: _fullAccuracyPurposeKey,
+      );
+      if (granted == LocationAccuracyStatus.precise) return;
+    } catch (_) {
+      // Si no se puede consultar, se sigue: el servidor valida la precisión.
+      return;
+    }
+    throw LocationException(
+      'Activa la ubicación precisa para esta app en los ajustes del teléfono y vuelve a intentar.',
+    );
+  }
+
   Future<bool> _isVpnActive() async {
+    if (defaultTargetPlatform == TargetPlatform.iOS) {
+      try {
+        return await _vpnChannel.invokeMethod<bool>('isVpnActive') ?? false;
+      } on PlatformException {
+        return false;
+      } on MissingPluginException {
+        return false;
+      }
+    }
     try {
       final results = await Connectivity().checkConnectivity();
       return results.contains(ConnectivityResult.vpn);

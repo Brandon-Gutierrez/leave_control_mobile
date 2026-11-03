@@ -300,6 +300,12 @@ void main() {
   testWidgets('HomePage filtra tus salidas por un rango del calendario', (
     tester,
   ) async {
+    // El calendario es una hoja inferior alta: en la superficie por defecto
+    // (800x600) el botón "Aplicar" queda fuera de la pantalla.
+    tester.view.physicalSize = _phoneSizes['iPhone 13 mini']!;
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+
     final api = _FakeLeaveService(
       leaveStatusResponse: {
         'name': 'Juan Pérez',
