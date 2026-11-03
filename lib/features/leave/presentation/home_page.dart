@@ -42,7 +42,6 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   bool _isLeave = false;
   bool _isLoading = true;
   bool _hasError = false;
-
   Timer? _timer;
   Duration _duration = Duration.zero;
   DateTime? _startDate;
