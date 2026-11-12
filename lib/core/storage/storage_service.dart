@@ -1,40 +1,23 @@
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
+/// Almacenamiento seguro del teléfono. Solo guarda el identificador del
+/// dispositivo: la sesión vive en las cookies y el nombre, el rol y el estado
+/// de la persona los entrega el servidor en cada pantalla, así que no se
+/// guardan copias de datos personales (ni el token de Comteco) en el teléfono.
 class StorageService {
   final _storage = const FlutterSecureStorage();
-  static const _keyToken = 'token';
-  static const _keyItem = 'item';
-  static const _keyName = 'name';
   static const _keyDeviceId = 'device_id';
 
-  //Guardar data de forma local
-  Future<void> saveData(String name, String item, String token) async {
-    await _storage.write(key: _keyToken, value: token);
-    await _storage.write(key: _keyItem, value: item);
-    await _storage.write(key: _keyName, value: name);
-  }
+  /// Claves de versiones anteriores, que guardaban el token de Comteco, el
+  /// nombre y el item de la persona.
+  static const _legacyKeys = ['token', 'item', 'name'];
 
-  //Leer el token de forma local
-  Future<String?> getToken() async {
-    return await _storage.read(key: _keyToken);
-  }
-
-  //Leer el nombre de forma local
-  Future<String?> getName() async {
-    return await _storage.read(key: _keyName);
-  }
-
-  //Actualizar data de forma local
-  Future<void> updateData(String token, String name) async {
-    await _storage.write(key: _keyToken, value: token);
-    await _storage.write(key: _keyName, value: name);
-  }
-
-  //Eliminar data de forma local
-  Future<void> deleteData() async {
-    await _storage.delete(key: _keyToken);
-    await _storage.delete(key: _keyItem);
-    await _storage.delete(key: _keyName);
+  //Eliminar lo que versiones anteriores guardaron de la persona (token de
+  //Comteco, nombre e item). Es seguro repetirlo.
+  Future<void> purgeLegacyIdentity() async {
+    for (final key in _legacyKeys) {
+      await _storage.delete(key: key);
+    }
   }
 
   //Leer el identificador de dispositivo guardado (si ya se generó antes)

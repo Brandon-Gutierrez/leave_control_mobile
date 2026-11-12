@@ -12,7 +12,7 @@ class AuthService {
 
   Dio get _dio => _apiClient.dio;
 
-  //realiza la peticion, comprueba que el usuario existe y guarda los datos localmente
+  //realiza la peticion y comprueba que el usuario existe (no se guarda nada de la persona en el teléfono)
   //Devuelve null si inició sesión correctamente, o el mensaje a mostrar. Solo
   //un 401 del servidor significa usuario o contraseña incorrectos: cualquier
   //otra falla (servidor caído, túnel apagado, dispositivo no autorizado) se
@@ -34,14 +34,7 @@ class AuthService {
     final serverMessage = data is Map ? data['message'] as String? : null;
 
     if (response.statusCode == 200 && data is Map && data['user'] is Map) {
-      final Map<String, dynamic> user = Map<String, dynamic>.from(
-        data['user'] as Map,
-      );
-      await _storageService.saveData(
-        (user['name'] ?? '').toString().trim(),
-        (user['item'] ?? '').toString(),
-        (user['external_identifier'] ?? '').toString(),
-      );
+      await _purgeLegacyIdentity();
       return null;
     }
 
@@ -60,6 +53,9 @@ class AuthService {
   //true: sesión válida. false: hay que iniciar sesión. Lanza
   //ApiRequestException si no se pudo comprobar (sin red, servidor caído).
   Future<bool> hasActiveSession() async {
+    // Quien actualizó la app con la sesión abierta aún tiene guardados el
+    // token, el nombre y el item de versiones anteriores: se borran.
+    await _purgeLegacyIdentity();
     final Response response;
     try {
       response = await _dio.get(
@@ -77,7 +73,16 @@ class AuthService {
     );
   }
 
-  //Cierra la sesion en el servidor y elimina los datos locales
+  //Borra lo que versiones anteriores guardaron de la persona; nunca debe fallar.
+  Future<void> _purgeLegacyIdentity() async {
+    try {
+      await _storageService.purgeLegacyIdentity();
+    } catch (_) {
+      // El almacenamiento seguro puede fallar en algunos equipos: no importa.
+    }
+  }
+
+  //Cierra la sesion en el servidor y elimina las cookies locales
   Future<void> logout() async {
     try {
       await _dio.post(ApiRoutes.logout, options: ApiResponses.acceptAnyStatus);
@@ -86,7 +91,7 @@ class AuthService {
     }
     try {
       await _apiClient.clearSession();
-      await _storageService.deleteData();
+      await _purgeLegacyIdentity();
     } catch (_) {
       // No debe impedir volver al login aunque falle el borrado local.
     }

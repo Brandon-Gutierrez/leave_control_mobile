@@ -14,7 +14,7 @@ Aplicación móvil para registrar salidas temporales y retornos de empleados. Au
 4. `features/leave/presentation/home_page.dart` carga el estado laboral (`LeaveService.fetchLeaveStatus()` → `LeaveStatus`), presenta la acción QR para salida/retorno y mantiene el contador de una salida activa.
 5. `features/leave/presentation/scan_page.dart` lee un QR con `mobile_scanner`. `LeaveService.scanQr()` captura la ubicación mediante `LocationService`, envía la operación y devuelve un `QrScanResult` con la siguiente acción.
 6. Si la API requiere un motivo, `features/leave/presentation/reasons_page.dart` carga los motivos y envía el comprobante temporal de salida junto a la selección y otra prueba de ubicación (`LeaveService.confirmLeave()`).
-7. `core/storage/storage_service.dart` persiste datos locales sensibles mediante almacenamiento seguro. `ApiClient` persiste por separado las cookies de sesión.
+7. `core/storage/storage_service.dart` guarda solo el identificador del dispositivo (almacenamiento seguro). No se guardan copias de datos personales ni el token de Comteco. `ApiClient` persiste por separado las cookies de sesión.
 
 Relación actual resumida: las pantallas llaman a `AuthService` / `LeaveService`; ambos usan `ApiClient` (Dio + cookies + encabezados) y `ApiResponses` (interpretación de respuestas y errores); servicios especializados encapsulan almacenamiento, dispositivo y ubicación.
 
@@ -50,7 +50,7 @@ lib/
 | `network/api_client.dart` | Singleton `ApiClient` con Dio: URL, timeouts, encabezados, `DeviceId` en cada petición, cookie persistente y limpieza de sesión. Usa `DeviceService` y `path_provider`. | Inyectar el cliente en los servicios; revisar `ignoreExpires: true` con el contrato de sesión del backend (el servidor debe seguir siendo la autoridad). |
 | `network/api_exceptions.dart` | `SessionExpiredException` (401) y `ApiRequestException` (red o respuesta de error con mensaje y código del backend). | — |
 | `network/api_responses.dart` | `ApiResponses`: acepta cualquier estado HTTP, lanza `SessionExpiredException` ante 401 y convierte fallos de red/respuestas de error en mensajes claros. | — |
-| `storage/storage_service.dart` | Persiste nombre, item, token e identificador del dispositivo con `FlutterSecureStorage`. | Inyectar una abstracción de almacenamiento; revisar si guardar `token` es necesario cuando la autenticación efectiva usa cookie. |
+| `storage/storage_service.dart` | Persiste solo el identificador del dispositivo con `FlutterSecureStorage`. Ya no guarda el token de Comteco, el nombre ni el item (el servidor los entrega cuando hacen falta) y borra los que dejaron versiones anteriores (`purgeLegacyIdentity`, al iniciar o cerrar sesión). | Inyectar una abstracción de almacenamiento. |
 | `storage/device_service.dart` | Genera una sola vez un identificador aleatorio y lo guarda; `ApiClient` lo envía como `DeviceId`. | Definir el ciclo de vida con el backend (reinstalación, revocación). |
 | `location/location_service.dart` | `LocationService` comprueba permisos/GPS/VPN y captura la posición; `LocationProof.toJson()` es el payload que valida el servidor; `LocationException` explica el fallo. | Mantener la política de negocio separada del acceso a plugins (proveedores inyectables). |
 | `theme/` | `AppColors`, `AppText`, `AppDimens` y `buildAppTheme()`. | Integrar los tokens en `ThemeData`/`ColorScheme`. |

@@ -5,7 +5,6 @@ import '../../../core/location/location_service.dart';
 import '../../../core/network/api_client.dart';
 import '../../../core/network/api_exceptions.dart';
 import '../../../core/network/api_responses.dart';
-import '../../../core/storage/storage_service.dart';
 import '../models/leave_reason.dart';
 import '../models/leave_status.dart';
 import '../models/qr_scan_result.dart';
@@ -13,7 +12,6 @@ import '../models/qr_scan_result.dart';
 /// Estado de salida de la persona, escaneo de QR, motivos y confirmación de
 /// la salida.
 class LeaveService {
-  final StorageService _storageService = StorageService();
   final LocationService _locationService;
   final ApiClient _apiClient = ApiClient();
 
@@ -38,24 +36,6 @@ class LeaveService {
     if (response.statusCode != 200) return null;
 
     final Map<String, dynamic> responseData = response.data;
-
-    // Sincroniza el nombre/token guardados localmente si cambiaron. Esto es
-    // solo caché local: si el almacenamiento seguro falla por cualquier
-    // motivo, no debe impedir que se muestre el estado de salida del usuario.
-    try {
-      final String? token = responseData['token'];
-      final String? name = responseData['name'];
-      final String? localToken = await _storageService.getToken();
-      final String? localName = await _storageService.getName();
-      if (token != null &&
-          name != null &&
-          (token != localToken || name != localName)) {
-        await _storageService.updateData(token, name);
-      }
-    } catch (e) {
-      // Se ignora: la información principal (isLeave, dateLeave, reason)
-      // ya está disponible en responseData.
-    }
 
     return LeaveStatus.fromJson(responseData);
   }
