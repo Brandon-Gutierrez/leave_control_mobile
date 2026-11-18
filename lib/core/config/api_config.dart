@@ -4,6 +4,6 @@ abstract final class ApiConfig {
   /// flutter run --dart-define=API_BASE_URL=https://mi-api
   static const String baseUrl = String.fromEnvironment(
     'API_BASE_URL',
-    defaultValue: 'https://duckie-carposporic-nickolas.ngrok-free.dev',
+    defaultValue: 'https://comtecoticket.duckdns.org:8443',
   );
 }
