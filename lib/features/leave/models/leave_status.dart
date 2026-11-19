@@ -33,7 +33,7 @@ class LeaveStatus {
   final String? name;
   final bool isLeave;
 
-  /// Fecha de la salida activa (ISO 8601); null si está adentro.
+  /// Fecha de la salida activa (ISO 8601); null si está dentro.
   final String? dateLeave;
 
   /// Motivo de la salida activa.

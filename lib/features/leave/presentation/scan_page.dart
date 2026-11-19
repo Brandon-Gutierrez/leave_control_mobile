@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 
@@ -29,6 +31,14 @@ class _ScanPageState extends State<ScanPage> {
   // Paleta
   static const primaryRed = AppColors.primaryRed;
   static const darkText = AppColors.darkText;
+
+  @override
+  void initState() {
+    super.initState();
+    // Enciende el GPS en segundo plano: al escanear, la lectura precisa ya
+    // suele estar lista y la validación de ubicación no falla la primera vez.
+    unawaited(LocationService().warmUp());
+  }
 
   @override
   void dispose() {

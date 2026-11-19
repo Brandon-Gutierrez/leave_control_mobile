@@ -496,9 +496,9 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     );
   }
 
-  /// Estado en un vistazo: verde = adentro, gris = fuera.
+  /// Estado en un vistazo: verde = dentro, gris = fuera.
   Widget _buildStatusPanel() {
-    // Adentro = verde apagado; fuera = gris neutro (sin un tercer color).
+    // Dentro = verde apagado; fuera = gris neutro (sin un tercer color).
     final color = _isLeave ? AppColors.darkText : AppColors.success;
     final bg = _isLeave ? AppColors.infoBg : AppColors.successBg;
     final days = _duration.inDays;
@@ -526,7 +526,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
               const SizedBox(width: 10),
               Expanded(
                 child: Text(
-                  _isLeave ? 'Estás fuera' : 'Estás adentro',
+                  _isLeave ? 'Estás fuera' : 'Estás dentro',
                   style: TextStyle(
                     fontSize: 24,
                     fontWeight: FontWeight.w800,
