@@ -8,6 +8,7 @@ class ApiRoutes {
   // Empleado
   static const String leaveStatus = '/api/me/leave-status';
   static const String leaveStats = '/api/me/leave-stats';
+  static const String myLeaves = '/api/me/leaves';
   static const String qrScan = '/api/qr/scan';
   static const String leaves = '/api/leaves';
 

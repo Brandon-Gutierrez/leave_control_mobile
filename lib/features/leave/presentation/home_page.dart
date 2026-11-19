@@ -39,6 +39,10 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   LeaveStat? _rangeStat;
   bool _rangeLoading = false;
 
+  /// Detalle de las salidas de la fecha o rango mostrado; null mientras carga
+  /// o si no se pudo consultar (en ese caso la sección simplemente no aparece).
+  List<LeaveDetail>? _details;
+
   bool _isLeave = false;
   bool _isLoading = true;
   bool _hasError = false;
@@ -99,6 +103,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         _stats = status.stats;
       });
       _initTimer();
+      unawaited(_loadDetails());
       if (_range != null) unawaited(_loadRange(_range!));
     } on SessionExpiredException catch (e) {
       _goToLogin(e.message);
@@ -145,8 +150,28 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     setState(() {
       _range = range;
       _rangeStat = null;
+      _details = null;
     });
     unawaited(_loadRange(range));
+    unawaited(_loadDetails());
+  }
+
+  /// Carga el detalle de las salidas de la fecha o rango que se está viendo
+  /// (hoy si no hay rango). Si falla no molesta: la sección no se muestra.
+  Future<void> _loadDetails() async {
+    final requested = _range;
+    final today = _dateOnly(DateTime.now());
+    final span = requested ?? DateTimeRange(start: today, end: today);
+    try {
+      final details = await _leaveService.fetchLeaveDetails(
+        span.start,
+        span.end,
+      );
+      if (!mounted || _range != requested) return;
+      setState(() => _details = details);
+    } on SessionExpiredException catch (e) {
+      _goToLogin(e.message);
+    }
   }
 
   Future<void> _loadRange(DateTimeRange range) async {
@@ -164,11 +189,15 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     }
   }
 
-  void _clearRange() => setState(() {
-    _range = null;
-    _rangeStat = null;
-    _rangeLoading = false;
-  });
+  void _clearRange() {
+    setState(() {
+      _range = null;
+      _rangeStat = null;
+      _rangeLoading = false;
+      _details = null;
+    });
+    unawaited(_loadDetails());
+  }
 
   String _formatDay(DateTime d) =>
       '${_twoDigits(d.day)}/${_twoDigits(d.month)}/${d.year}';
@@ -417,6 +446,10 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
                     _buildScanButton(),
                     const SizedBox(height: 28),
                     _buildStats(),
+                    if (_details != null && _details!.isNotEmpty) ...[
+                      const SizedBox(height: 24),
+                      _buildDetails(_details!),
+                    ],
                     if (_visibleUnreturned.isNotEmpty) ...[
                       const SizedBox(height: 24),
                       _buildUnreturnedWarnings(),
@@ -581,6 +614,29 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
             ),
         ],
       ),
+    );
+  }
+
+  /// Qué hizo la persona en la fecha o rango elegido: de qué predio salió, por
+  /// qué motivo, de qué hora a qué hora y cuánto tiempo estuvo fuera.
+  Widget _buildDetails(List<LeaveDetail> details) {
+    // Con varios días (o una salida que cruza medianoche) cada hora lleva su fecha.
+    final multiDay = _range != null && !_isSingleDay(_range!);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        const Text(
+          'Detalle de tus salidas',
+          style: TextStyle(
+            fontSize: 19,
+            fontWeight: FontWeight.w800,
+            color: darkText,
+          ),
+        ),
+        const SizedBox(height: 10),
+        for (final leave in details)
+          _LeaveDetailCard(leave: leave, showDates: multiDay),
+      ],
     );
   }
 
@@ -819,6 +875,128 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
             ),
           ),
       ],
+    );
+  }
+}
+
+/// Una salida: predio, motivo, de qué hora a qué hora y duración.
+class _LeaveDetailCard extends StatelessWidget {
+  final LeaveDetail leave;
+
+  /// Antepone la fecha a las horas (vista de varios días).
+  final bool showDates;
+
+  const _LeaveDetailCard({required this.leave, required this.showDates});
+
+  static String _two(int n) => n.toString().padLeft(2, '0');
+
+  static String _day(DateTime d) => '${_two(d.day)}/${_two(d.month)}';
+
+  static String _hm(DateTime d) => '${_two(d.hour)}:${_two(d.minute)}';
+
+  static String _duration(int minutes) {
+    if (minutes < 60) return '$minutes min';
+    final h = minutes ~/ 60;
+    final m = minutes % 60;
+    return m == 0 ? '$h h' : '$h h $m min';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final left = leave.leftAt;
+    final returned = leave.returnedAt;
+    // Si vuelve otro día, la hora de retorno lleva su fecha para no confundir.
+    final returnedOtherDay = returned != null && _day(returned) != _day(left);
+    String stamp(DateTime d, bool withDay) =>
+        withDay ? '${_day(d)} ${_hm(d)}' : _hm(d);
+
+    final schedule = returned == null
+        ? 'Desde las ${stamp(left, showDates)} · sigue fuera'
+        : 'De ${stamp(left, showDates || returnedOtherDay)} '
+              'a ${stamp(returned, showDates || returnedOtherDay)}';
+    final minutes = leave.minutes;
+    final premise = (leave.premise ?? '').isEmpty
+        ? 'Predio no disponible'
+        : leave.premise!;
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 10),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        border: Border(
+          left: BorderSide(
+            color: leave.isOpen ? AppColors.danger : AppColors.info,
+            width: 5,
+          ),
+          top: const BorderSide(color: AppColors.line),
+          right: const BorderSide(color: AppColors.line),
+          bottom: const BorderSide(color: AppColors.line),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.place_outlined, size: 22, color: AppColors.info),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  'Salida de $premise',
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w800,
+                    color: AppColors.darkText,
+                  ),
+                ),
+              ),
+              if (minutes != null)
+                Text(
+                  _duration(minutes),
+                  style: const TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w800,
+                    color: AppColors.darkText,
+                  ),
+                ),
+            ],
+          ),
+          if ((leave.reason ?? '').isNotEmpty) ...[
+            const SizedBox(height: 6),
+            Text(
+              'Motivo: ${leave.reason}',
+              style: const TextStyle(
+                fontSize: 15,
+                fontWeight: FontWeight.w700,
+                color: AppColors.darkText,
+              ),
+            ),
+          ],
+          const SizedBox(height: 4),
+          Row(
+            children: [
+              const Icon(
+                Icons.schedule_rounded,
+                size: 18,
+                color: Colors.black54,
+              ),
+              const SizedBox(width: 6),
+              Expanded(
+                child: Text(
+                  schedule,
+                  style: TextStyle(
+                    fontSize: 14,
+                    color: leave.isOpen ? AppColors.danger : Colors.black54,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
     );
   }
 }

@@ -67,6 +67,33 @@ class LeaveService {
     );
   }
 
+  //Detalle de las salidas entre dos fechas (predio, motivo, horas y duración);
+  //null si falla.
+  Future<List<LeaveDetail>?> fetchLeaveDetails(
+    DateTime from,
+    DateTime to,
+  ) async {
+    String ymd(DateTime d) =>
+        '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
+
+    final Response response;
+    try {
+      response = await _dio.get(
+        ApiRoutes.myLeaves,
+        queryParameters: {'from': ymd(from), 'to': ymd(to)},
+        options: ApiResponses.acceptAnyStatus,
+      );
+    } catch (e) {
+      return null;
+    }
+    ApiResponses.throwIfUnauthorized(response);
+    if (response.statusCode != 200) return null;
+
+    final data = response.data;
+    if (data is! Map) return null;
+    return LeaveDetail.listFromJson(data['data']);
+  }
+
   //Envia el QR escaneado y devuelve la accion a realizar (mostrar motivos o retorno)
   //Lanza ApiRequestException con un mensaje claro si el servidor rechaza la
   //solicitud (QR vencido, sin cupo, etc.) o si falla la red.

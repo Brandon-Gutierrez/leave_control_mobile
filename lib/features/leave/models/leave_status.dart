@@ -9,6 +9,44 @@ class LeaveStat {
   const LeaveStat(this.exits, this.minutes, [this.unreturnedLeaves = const []]);
 }
 
+/// Una salida con su predio, motivo, horas y duración, para que la persona
+/// entienda su situación (`GET /me/leaves`).
+class LeaveDetail {
+  final DateTime leftAt;
+
+  /// Null si aún no marcó su retorno.
+  final DateTime? returnedAt;
+  final String? premise;
+  final String? reason;
+
+  /// Minutos fuera; null si aún no volvió.
+  final int? minutes;
+
+  const LeaveDetail({
+    required this.leftAt,
+    this.returnedAt,
+    this.premise,
+    this.reason,
+    this.minutes,
+  });
+
+  bool get isOpen => returnedAt == null;
+
+  /// Lee `[{leave_time, return_time, premise, reason, minutes}]` ignorando
+  /// entradas sin una hora de salida válida.
+  static List<LeaveDetail> listFromJson(dynamic raw) => [
+    for (final item in raw as List? ?? const [])
+      if (item is Map && DateTime.tryParse('${item['leave_time']}') != null)
+        LeaveDetail(
+          leftAt: DateTime.parse('${item['leave_time']}').toLocal(),
+          returnedAt: DateTime.tryParse('${item['return_time']}')?.toLocal(),
+          premise: item['premise']?.toString(),
+          reason: item['reason']?.toString(),
+          minutes: (item['minutes'] as num?)?.toInt(),
+        ),
+  ];
+}
+
 /// Salida de un día anterior que nunca marcó retorno.
 class UnreturnedLeave {
   final DateTime leftAt;

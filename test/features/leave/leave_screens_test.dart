@@ -46,6 +46,15 @@ class _FakeLeaveService implements LeaveService {
     return rangeResponse;
   }
 
+  /// Detalle de salidas que devuelve el fake (por defecto, ninguna).
+  List<LeaveDetail>? detailsResponse = const [];
+
+  @override
+  Future<List<LeaveDetail>?> fetchLeaveDetails(
+    DateTime from,
+    DateTime to,
+  ) async => detailsResponse;
+
   @override
   Future<List<LeaveReasonOption>?> getReasons(String namePremise) async =>
       reasonsResponse;
@@ -187,12 +196,16 @@ void main() {
   testWidgets('ReasonsPage: tocar un motivo registra la salida directamente', (
     tester,
   ) async {
-    final api = _FakeLeaveService(
-      reasonsResponse: const [
-        LeaveReasonOption('Trámite bancario'),
-        LeaveReasonOption('Cita médica'),
-      ],
-    )..confirmError = ApiRequestException('Sin conexión'); // se queda en la pantalla
+    final api =
+        _FakeLeaveService(
+            reasonsResponse: const [
+              LeaveReasonOption('Trámite bancario'),
+              LeaveReasonOption('Cita médica'),
+            ],
+          )
+          ..confirmError = ApiRequestException(
+            'Sin conexión',
+          ); // se queda en la pantalla
     await tester.pumpWidget(
       MaterialApp(
         home: ReasonsPage(
@@ -269,7 +282,9 @@ void main() {
     expect(options[2].blockedNote, 'Límite alcanzado: 1 vez por mes');
     // Respuesta antigua sin límites: todo disponible.
     expect(
-      LeaveReasonOption.listFromJson({'reasons': ['A']}).single.isBlocked,
+      LeaveReasonOption.listFromJson({
+        'reasons': ['A'],
+      }).single.isBlocked,
       isFalse,
     );
   });
@@ -295,6 +310,70 @@ void main() {
     );
     await _settle(tester);
     await _tearDownTimers(tester);
+  });
+
+  testWidgets(
+    'HomePage muestra el detalle de cada salida bajo las estadísticas',
+    (tester) async {
+      tester.view.physicalSize = _phoneSizes['iPhone 13 mini']!;
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+
+      final api =
+          _FakeLeaveService(
+              leaveStatusResponse: {
+                'name': 'Juan Pérez',
+                'isLeave': false,
+                'stats': {
+                  'day': {'exits': 2, 'minutes': 75},
+                },
+              },
+            )
+            ..detailsResponse = [
+              LeaveDetail(
+                leftAt: DateTime(2026, 3, 2, 14, 0),
+                premise: 'Prado',
+                reason: 'Cita médica',
+              ),
+              LeaveDetail(
+                leftAt: DateTime(2026, 3, 2, 10, 30),
+                returnedAt: DateTime(2026, 3, 2, 11, 15),
+                premise: 'Central',
+                reason: 'Trámite bancario',
+                minutes: 45,
+              ),
+            ];
+      await tester.pumpWidget(MaterialApp(home: HomePage(leaveService: api)));
+      await _settle(tester);
+      await tester.pump();
+
+      expect(find.text('Detalle de tus salidas'), findsOneWidget);
+      // Salida completa: predio, motivo, de qué hora a qué hora y duración.
+      expect(find.text('Salida de Central'), findsOneWidget);
+      expect(find.text('Motivo: Trámite bancario'), findsOneWidget);
+      expect(find.text('De 10:30 a 11:15'), findsOneWidget);
+      expect(find.text('45 min'), findsOneWidget);
+      // Salida sin retorno: se indica que sigue fuera.
+      expect(find.text('Salida de Prado'), findsOneWidget);
+      expect(find.text('Desde las 14:00 · sigue fuera'), findsOneWidget);
+    },
+  );
+
+  testWidgets('HomePage sin salidas no muestra el detalle', (tester) async {
+    final api = _FakeLeaveService(
+      leaveStatusResponse: {
+        'name': 'Juan Pérez',
+        'isLeave': false,
+        'stats': {
+          'day': {'exits': 0, 'minutes': 0},
+        },
+      },
+    );
+    await tester.pumpWidget(MaterialApp(home: HomePage(leaveService: api)));
+    await _settle(tester);
+    await tester.pump();
+
+    expect(find.text('Detalle de tus salidas'), findsNothing);
   });
 
   testWidgets('HomePage filtra tus salidas por un rango del calendario', (
@@ -458,6 +537,12 @@ class _SlowFakeLeaveService implements LeaveService {
 
   @override
   Future<LeaveStat?> fetchRangeStats(DateTime from, DateTime to) async => null;
+
+  @override
+  Future<List<LeaveDetail>?> fetchLeaveDetails(
+    DateTime from,
+    DateTime to,
+  ) async => null;
 
   @override
   Future<List<LeaveReasonOption>?> getReasons(String namePremise) async => null;
