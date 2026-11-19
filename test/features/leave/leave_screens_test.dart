@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:control_input_output/core/device/device_code_service.dart';
 import 'package:control_input_output/core/network/api_exceptions.dart';
 import 'package:control_input_output/features/auth/presentation/login_page.dart';
 import 'package:control_input_output/features/leave/data/leave_service.dart';
@@ -12,6 +13,9 @@ import 'package:control_input_output/features/leave/presentation/reasons_page.da
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_test/flutter_test.dart';
+
+/// Sin consulta real del código de dispositivo (no hay red en las pruebas).
+Future<DeviceCodeInfo?> _noDeviceCode() async => null;
 
 /// Tamaños lógicos de teléfonos comunes (ancho x alto).
 const _phoneSizes = <String, Size>{
@@ -104,7 +108,9 @@ void main() {
       tester.view.devicePixelRatio = 1.0;
       addTearDown(tester.view.reset);
 
-      await tester.pumpWidget(const MaterialApp(home: LoginPage()));
+      await tester.pumpWidget(
+        MaterialApp(home: LoginPage(deviceCodeLoader: _noDeviceCode)),
+      );
       await tester.pumpAndSettle();
 
       expect(tester.takeException(), isNull);
@@ -122,7 +128,11 @@ void main() {
       final api = _FakeLeaveService(
         leaveStatusResponse: {'name': 'Juan Pérez', 'isLeave': false},
       );
-      await tester.pumpWidget(MaterialApp(home: HomePage(leaveService: api)));
+      await tester.pumpWidget(
+        MaterialApp(
+          home: HomePage(leaveService: api, deviceCodeLoader: _noDeviceCode),
+        ),
+      );
       await _settle(tester);
 
       expect(tester.takeException(), isNull);
@@ -149,7 +159,11 @@ void main() {
             'reason': 'Trámite bancario',
           },
         );
-        await tester.pumpWidget(MaterialApp(home: HomePage(leaveService: api)));
+        await tester.pumpWidget(
+          MaterialApp(
+            home: HomePage(leaveService: api, deviceCodeLoader: _noDeviceCode),
+          ),
+        );
         await _settle(tester);
 
         expect(tester.takeException(), isNull);
@@ -296,7 +310,11 @@ void main() {
     final neverCompletes = Completer<LeaveStatus?>();
     final slowApi = _SlowFakeLeaveService(neverCompletes.future);
 
-    await tester.pumpWidget(MaterialApp(home: HomePage(leaveService: slowApi)));
+    await tester.pumpWidget(
+      MaterialApp(
+        home: HomePage(leaveService: slowApi, deviceCodeLoader: _noDeviceCode),
+      ),
+    );
     // Un solo pump: se inspecciona el primer frame, antes de que la petición
     // (que nunca termina) pueda resolverse.
     await tester.pump();
@@ -343,7 +361,11 @@ void main() {
                 minutes: 45,
               ),
             ];
-      await tester.pumpWidget(MaterialApp(home: HomePage(leaveService: api)));
+      await tester.pumpWidget(
+        MaterialApp(
+          home: HomePage(leaveService: api, deviceCodeLoader: _noDeviceCode),
+        ),
+      );
       await _settle(tester);
       await tester.pump();
 
@@ -369,7 +391,11 @@ void main() {
         },
       },
     );
-    await tester.pumpWidget(MaterialApp(home: HomePage(leaveService: api)));
+    await tester.pumpWidget(
+      MaterialApp(
+        home: HomePage(leaveService: api, deviceCodeLoader: _noDeviceCode),
+      ),
+    );
     await _settle(tester);
     await tester.pump();
 
@@ -399,7 +425,7 @@ void main() {
         locale: const Locale('es'),
         supportedLocales: const [Locale('es')],
         localizationsDelegates: GlobalMaterialLocalizations.delegates,
-        home: HomePage(leaveService: api),
+        home: HomePage(leaveService: api, deviceCodeLoader: _noDeviceCode),
       ),
     );
     await _settle(tester);
@@ -451,7 +477,11 @@ void main() {
         ],
       },
     );
-    await tester.pumpWidget(MaterialApp(home: HomePage(leaveService: api)));
+    await tester.pumpWidget(
+      MaterialApp(
+        home: HomePage(leaveService: api, deviceCodeLoader: _noDeviceCode),
+      ),
+    );
     await _settle(tester);
 
     // Vista de hoy: sin advertencias de otras fechas.
@@ -483,7 +513,11 @@ void main() {
     final api = _FakeLeaveService(
       leaveStatusResponse: {'name': 'Juan Pérez', 'isLeave': false},
     );
-    await tester.pumpWidget(MaterialApp(home: HomePage(leaveService: api)));
+    await tester.pumpWidget(
+      MaterialApp(
+        home: HomePage(leaveService: api, deviceCodeLoader: _noDeviceCode),
+      ),
+    );
     await _settle(tester);
 
     await tester.tap(find.byTooltip('Día anterior'));
@@ -506,7 +540,11 @@ void main() {
         leaveStatusResponse: null,
       ); // fuerza el error simulado
 
-      await tester.pumpWidget(MaterialApp(home: HomePage(leaveService: api)));
+      await tester.pumpWidget(
+        MaterialApp(
+          home: HomePage(leaveService: api, deviceCodeLoader: _noDeviceCode),
+        ),
+      );
       await _settle(tester);
 
       expect(tester.takeException(), isNull);

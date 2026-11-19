@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../../../core/device/device_code_note.dart';
+import '../../../core/device/device_code_service.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_text_styles.dart';
 import '../../../core/widgets/app_popup.dart';
@@ -7,7 +9,10 @@ import '../../leave/presentation/home_page.dart';
 import '../data/auth_service.dart';
 
 class LoginPage extends StatefulWidget {
-  const LoginPage({super.key});
+  /// Permite inyectar la consulta del código de dispositivo (pruebas).
+  final Future<DeviceCodeInfo?> Function()? deviceCodeLoader;
+
+  const LoginPage({super.key, this.deviceCodeLoader});
 
   @override
   State<LoginPage> createState() => _LoginPageState();
@@ -225,6 +230,10 @@ class _LoginPageState extends State<LoginPage> {
                                 ),
                         ),
                       ),
+                      // Solo aparece si este teléfono ya está vinculado a una
+                      // cuenta: quien no pueda ingresar lo dicta a RR. HH.
+                      const SizedBox(height: 24),
+                      DeviceCodeNote(loader: widget.deviceCodeLoader),
                     ],
                   ),
                 ),

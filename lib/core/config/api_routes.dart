@@ -5,6 +5,9 @@ class ApiRoutes {
   static const String logout = '/api/auth/logout';
   static const String me = '/api/auth/me';
 
+  // Código del dispositivo (público: sirve aunque no se pueda iniciar sesión)
+  static const String deviceCode = '/api/device/code';
+
   // Empleado
   static const String leaveStatus = '/api/me/leave-status';
   static const String leaveStats = '/api/me/leave-stats';

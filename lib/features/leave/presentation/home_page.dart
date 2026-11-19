@@ -2,6 +2,8 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import '../../../core/device/device_code_note.dart';
+import '../../../core/device/device_code_service.dart';
 import '../../../core/network/api_exceptions.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_text_styles.dart';
@@ -18,7 +20,15 @@ class HomePage extends StatefulWidget {
   final LeaveService? leaveService;
   final AuthService? authService;
 
-  const HomePage({super.key, this.leaveService, this.authService});
+  /// Permite inyectar la consulta del código de dispositivo (pruebas).
+  final Future<DeviceCodeInfo?> Function()? deviceCodeLoader;
+
+  const HomePage({
+    super.key,
+    this.leaveService,
+    this.authService,
+    this.deviceCodeLoader,
+  });
 
   @override
   State<HomePage> createState() => _HomePageState();
@@ -454,6 +464,13 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
                       const SizedBox(height: 24),
                       _buildUnreturnedWarnings(),
                     ],
+                    const SizedBox(height: 24),
+                    DeviceCodeNote(
+                      loader: widget.deviceCodeLoader,
+                      help:
+                          'Recursos Humanos puede pedirte este código para '
+                          'ayudarte con el acceso a tu cuenta.',
+                    ),
                   ],
                 ),
               ),

@@ -12,7 +12,7 @@ class ControlLeavesApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
-      title: 'Mobile app',
+      title: 'Salidas Temporales',
       theme: buildAppTheme(),
       locale: const Locale('es'),
       supportedLocales: const [Locale('es')],

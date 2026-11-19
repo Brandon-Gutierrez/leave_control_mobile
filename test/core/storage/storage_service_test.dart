@@ -5,24 +5,27 @@ import 'package:flutter_test/flutter_test.dart';
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  test('borra el token de Comteco, el nombre y el item de versiones anteriores', () async {
-    FlutterSecureStorage.setMockInitialValues({
-      'token': 'token-de-comteco',
-      'item': '2057',
-      'name': 'Juan Pérez',
-      'device_id': 'dispositivo-123',
-    });
-    final storage = StorageService();
+  test(
+    'borra el token de Comteco, el nombre y el item de versiones anteriores',
+    () async {
+      FlutterSecureStorage.setMockInitialValues({
+        'token': 'token-de-comteco',
+        'item': '2057',
+        'name': 'Juan Pérez',
+        'device_id': 'dispositivo-123',
+      });
+      final storage = StorageService();
 
-    await storage.purgeLegacyIdentity();
+      await storage.purgeLegacyIdentity();
 
-    const raw = FlutterSecureStorage();
-    expect(await raw.read(key: 'token'), isNull);
-    expect(await raw.read(key: 'item'), isNull);
-    expect(await raw.read(key: 'name'), isNull);
-    // El identificador del dispositivo sí se conserva: la vinculación depende de él.
-    expect(await storage.getDeviceId(), 'dispositivo-123');
-  });
+      const raw = FlutterSecureStorage();
+      expect(await raw.read(key: 'token'), isNull);
+      expect(await raw.read(key: 'item'), isNull);
+      expect(await raw.read(key: 'name'), isNull);
+      // El identificador del dispositivo sí se conserva: la vinculación depende de él.
+      expect(await storage.getDeviceId(), 'dispositivo-123');
+    },
+  );
 
   test('repetirlo no falla aunque no haya nada guardado', () async {
     FlutterSecureStorage.setMockInitialValues({});
