@@ -28,14 +28,10 @@ abstract final class AppText {
   );
 }
 
-/// Medidas mínimas para que los botones sean fáciles de tocar.
+/// Medidas compartidas: alto del botón principal y radios de las esquinas.
 abstract final class AppDimens {
-  static const double buttonHeight = 56.0;
-
   /// Botón principal (Ingresar, Reintentar…).
   static const double primaryButtonHeight = 58.0;
-  static const double fieldHeight = 56.0;
-  static const double iconSize = 26.0;
 
   static const double radiusField = 14.0;
   static const double radiusButton = 16.0;

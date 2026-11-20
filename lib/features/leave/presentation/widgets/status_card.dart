@@ -265,28 +265,40 @@ class _Ring extends StatelessWidget {
             ),
           ),
           if (out)
-            Padding(
-              padding: EdgeInsets.symmetric(horizontal: size * 0.17),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  FittedBox(
-                    fit: BoxFit.scaleDown,
-                    child: Text(
-                      elapsedText,
-                      style: const TextStyle(
-                        fontSize: 24,
-                        fontWeight: FontWeight.w800,
-                        letterSpacing: 0.5,
-                        color: Colors.white,
+            // El anillo tiene un tamaño fijo: el texto de adentro crece hasta
+            // x1.2 como mucho y se reduce si aun así no cabe.
+            MediaQuery.withClampedTextScaling(
+              maxScaleFactor: 1.2,
+              child: Padding(
+                padding: EdgeInsets.symmetric(horizontal: size * 0.17),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    FittedBox(
+                      fit: BoxFit.scaleDown,
+                      child: Text(
+                        elapsedText,
+                        style: const TextStyle(
+                          fontSize: 24,
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: 0.5,
+                          color: Colors.white,
+                        ),
                       ),
                     ),
-                  ),
-                  const Text(
-                    'transcurrido',
-                    style: TextStyle(fontSize: 11, color: Color(0xFF9E9E9E)),
-                  ),
-                ],
+                    const FittedBox(
+                      fit: BoxFit.scaleDown,
+                      child: Text(
+                        'transcurrido',
+                        maxLines: 1,
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: Color(0xFF9E9E9E),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
               ),
             )
           else

@@ -43,6 +43,14 @@ class AppBottomBar extends StatelessWidget {
   Widget build(BuildContext context) {
     final inset = MediaQuery.paddingOf(context).bottom;
 
+    // La barra tiene un alto fijo: sus textos crecen hasta x1.3 y no más.
+    return MediaQuery.withClampedTextScaling(
+      maxScaleFactor: 1.3,
+      child: _buildBar(inset),
+    );
+  }
+
+  Widget _buildBar(double inset) {
     return SizedBox(
       height: barHeight + fabOverflow + inset,
       child: Stack(
@@ -101,14 +109,17 @@ class AppBottomBar extends StatelessWidget {
                   children: [
                     _ScanButton(onTap: onScan, label: scanLabel),
                     const SizedBox(height: 4),
-                    Text(
-                      scanLabel,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w800,
-                        color: AppColors.darkText,
+                    // Se reduce en vez de cortarse con «…» si la letra es grande.
+                    FittedBox(
+                      fit: BoxFit.scaleDown,
+                      child: Text(
+                        scanLabel,
+                        maxLines: 1,
+                        style: const TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w800,
+                          color: AppColors.darkText,
+                        ),
                       ),
                     ),
                   ],
@@ -155,13 +166,16 @@ class _NavItem extends StatelessWidget {
               children: [
                 Icon(icon, size: 28, color: color),
                 const SizedBox(height: 4),
-                Text(
-                  label,
-                  maxLines: 1,
-                  style: TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w700,
-                    color: color,
+                FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: Text(
+                    label,
+                    maxLines: 1,
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
+                      color: color,
+                    ),
                   ),
                 ),
               ],

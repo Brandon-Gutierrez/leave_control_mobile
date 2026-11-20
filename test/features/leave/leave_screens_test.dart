@@ -19,6 +19,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import '../../support/fake_leave_service.dart';
+
 /// Sin consulta real del código de dispositivo (no hay red en las pruebas).
 Future<DeviceCodeInfo?> _noDeviceCode() async => null;
 
@@ -31,65 +33,6 @@ const _phoneSizes = <String, Size>{
   'iPhone 15 Pro Max': Size(430, 932),
   'Horizontal': Size(800, 360),
 };
-
-/// [LeaveService] de prueba: no toca la red ni el almacenamiento seguro,
-/// así las pantallas se pueden probar de forma instantánea y determinista.
-class _FakeLeaveService implements LeaveService {
-  Map<String, dynamic>? leaveStatusResponse;
-  List<LeaveReasonOption>? reasonsResponse;
-
-  _FakeLeaveService({this.leaveStatusResponse, this.reasonsResponse});
-
-  @override
-  Future<LeaveStatus?> fetchLeaveStatus() async => leaveStatusResponse == null
-      ? null
-      : LeaveStatus.fromJson(leaveStatusResponse!);
-
-  /// Último rango consultado y resultado que devuelve el fake.
-  DateTimeRange? requestedRange;
-  LeaveStat? rangeResponse = const LeaveStat(3, 45);
-
-  @override
-  Future<LeaveStat?> fetchRangeStats(DateTime from, DateTime to) async {
-    requestedRange = DateTimeRange(start: from, end: to);
-    return rangeResponse;
-  }
-
-  /// Detalle de salidas que devuelve el fake (por defecto, ninguna).
-  List<LeaveDetail>? detailsResponse = const [];
-
-  @override
-  Future<List<LeaveDetail>?> fetchLeaveDetails(
-    DateTime from,
-    DateTime to,
-  ) async => detailsResponse;
-
-  @override
-  Future<List<LeaveReasonOption>?> getReasons(String namePremise) async =>
-      reasonsResponse;
-
-  /// Motivo con el que se pidió registrar la salida, y error a simular.
-  String? confirmedReason;
-  ApiRequestException? confirmError;
-
-  @override
-  Future<void> confirmLeave(
-    String namePremise,
-    String nameReason,
-    String qrData,
-  ) async {
-    confirmedReason = nameReason;
-    if (confirmError != null) throw confirmError!;
-  }
-
-  @override
-  Future<QrScanResult> scanQr(String qrData) async => const QrScanResult(
-    message: '',
-    action: null,
-    leaveTicket: null,
-    leaveTicketExpiresAt: null,
-  );
-}
 
 /// Deja que la Future falsa (instantánea) se resuelva y la UI se actualice.
 /// No usa pumpAndSettle: HomePage puede dejar un Timer.periodic corriendo
@@ -131,7 +74,7 @@ void main() {
       tester.view.devicePixelRatio = 1.0;
       addTearDown(tester.view.reset);
 
-      final api = _FakeLeaveService(
+      final api = FakeLeaveService(
         leaveStatusResponse: {'name': 'Juan Pérez', 'isLeave': false},
       );
       await tester.pumpWidget(
@@ -157,7 +100,7 @@ void main() {
         tester.view.devicePixelRatio = 1.0;
         addTearDown(tester.view.reset);
 
-        final api = _FakeLeaveService(
+        final api = FakeLeaveService(
           leaveStatusResponse: {
             'name': 'Juan Pérez',
             'isLeave': true,
@@ -189,7 +132,7 @@ void main() {
       tester.view.devicePixelRatio = 1.0;
       addTearDown(tester.view.reset);
 
-      final api = _FakeLeaveService(
+      final api = FakeLeaveService(
         reasonsResponse: const [
           LeaveReasonOption('Trámite bancario'),
           LeaveReasonOption('Cita médica'),
@@ -220,7 +163,7 @@ void main() {
     tester,
   ) async {
     final api =
-        _FakeLeaveService(
+        FakeLeaveService(
             reasonsResponse: const [
               LeaveReasonOption('Trámite bancario'),
               LeaveReasonOption('Cita médica'),
@@ -254,7 +197,7 @@ void main() {
   testWidgets('ReasonsPage no deja elegir un motivo que llegó a su límite', (
     tester,
   ) async {
-    final api = _FakeLeaveService(
+    final api = FakeLeaveService(
       reasonsResponse: LeaveReasonOption.listFromJson({
         'reasons': ['Almuerzo', 'Cita médica'],
         'blocked_reasons': [
@@ -293,7 +236,7 @@ void main() {
   testWidgets('ReasonsPage invita a elegir y dice de qué predio es', (
     tester,
   ) async {
-    final api = _FakeLeaveService(
+    final api = FakeLeaveService(
       reasonsResponse: const [LeaveReasonOption('Cita médica')],
     );
     Future<void> open(String qr) async {
@@ -326,7 +269,7 @@ void main() {
     tester,
   ) async {
     var now = DateTime(2026, 11, 19, 12, 0, 0);
-    final api = _FakeLeaveService(
+    final api = FakeLeaveService(
       reasonsResponse: const [LeaveReasonOption('Cita médica')],
     );
     await tester.pumpWidget(
@@ -360,7 +303,7 @@ void main() {
       tester.view.devicePixelRatio = 1.0;
       addTearDown(tester.view.reset);
 
-      final api = _FakeLeaveService(
+      final api = FakeLeaveService(
         reasonsResponse: LeaveReasonOption.listFromJson({
           'reasons': [
             for (var i = 1; i <= 12; i++)
@@ -482,7 +425,7 @@ void main() {
   ) async {
     phone(tester);
     final api =
-        _FakeLeaveService(
+        FakeLeaveService(
             leaveStatusResponse: {
               'name': 'Juan Pérez',
               'isLeave': false,
@@ -534,7 +477,7 @@ void main() {
   ) async {
     phone(tester);
     final api =
-        _FakeLeaveService(
+        FakeLeaveService(
             leaveStatusResponse: {
               'name': 'Juan Pérez',
               'isLeave': true,
@@ -577,7 +520,7 @@ void main() {
     tester,
   ) async {
     phone(tester);
-    final api = _FakeLeaveService(
+    final api = FakeLeaveService(
       leaveStatusResponse: {
         'name': 'Juan Pérez',
         'isLeave': false,
@@ -605,7 +548,7 @@ void main() {
     // El calendario es una hoja inferior alta: en la superficie por defecto
     // (800x600) el botón "Aplicar" queda fuera de la pantalla.
     phone(tester);
-    final api = _FakeLeaveService(
+    final api = FakeLeaveService(
       leaveStatusResponse: {
         'name': 'Juan Pérez',
         'isLeave': false,
@@ -662,7 +605,7 @@ void main() {
     tester,
   ) async {
     phone(tester);
-    final api = _FakeLeaveService(
+    final api = FakeLeaveService(
       leaveStatusResponse: {'name': 'Juan Pérez', 'isLeave': false},
     );
     await pumpHome(tester, api);
@@ -705,7 +648,7 @@ void main() {
     tester,
   ) async {
     phone(tester);
-    final api = _FakeLeaveService(
+    final api = FakeLeaveService(
       leaveStatusResponse: {'name': 'Juan Pérez', 'isLeave': false},
     );
     await pumpHome(tester, api);
@@ -736,7 +679,7 @@ void main() {
     tester,
   ) async {
     phone(tester);
-    final api = _FakeLeaveService(
+    final api = FakeLeaveService(
       leaveStatusResponse: {
         'name': 'Juan Pérez',
         'isLeave': false,
@@ -778,7 +721,7 @@ void main() {
         '${entry.key}', (tester) async {
       phone(tester, entry.key);
       final api =
-          _FakeLeaveService(
+          FakeLeaveService(
               leaveStatusResponse: {
                 'name': 'María Fernanda Rodríguez de la Quintana',
                 'role': 'EMPLOYEE',
@@ -830,7 +773,7 @@ void main() {
     tester,
   ) async {
     phone(tester);
-    final api = _FakeLeaveService(
+    final api = FakeLeaveService(
       leaveStatusResponse: {'name': 'Juan Pérez', 'isLeave': false},
     );
     await pumpHome(
@@ -920,7 +863,7 @@ void main() {
   testWidgets(
     'HomePage muestra un mensaje claro y reintentar si falla la carga',
     (tester) async {
-      final api = _FakeLeaveService(
+      final api = FakeLeaveService(
         leaveStatusResponse: null,
       ); // fuerza el error simulado
 

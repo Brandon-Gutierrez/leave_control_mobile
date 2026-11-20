@@ -609,7 +609,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         Expanded(
           child: Text(
             _dateTitle,
-            maxLines: 1,
+            // Con la letra grande pasa a dos líneas en vez de cortarse.
+            maxLines: 2,
             overflow: TextOverflow.ellipsis,
             style: const TextStyle(
               fontSize: 16,
