@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../theme/app_colors.dart';
+import '../theme/app_text_styles.dart';
 import 'device_code_service.dart';
 
 /// Muestra el código de este teléfono cuando ya está vinculado a una cuenta,
@@ -45,10 +46,10 @@ class _DeviceCodeNoteState extends State<DeviceCodeNote> {
     if (info == null || !info.linked) return const SizedBox.shrink();
 
     return Container(
-      padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
-      decoration: const BoxDecoration(
+      padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
+      decoration: BoxDecoration(
         color: AppColors.infoBg,
-        border: Border(left: BorderSide(color: AppColors.info, width: 5)),
+        borderRadius: BorderRadius.circular(AppDimens.radiusButton),
       ),
       child: Row(
         children: [
@@ -60,7 +61,7 @@ class _DeviceCodeNoteState extends State<DeviceCodeNote> {
               children: [
                 const Text(
                   'Código de este dispositivo',
-                  style: TextStyle(fontSize: 13, color: Colors.black54),
+                  style: TextStyle(fontSize: 13, color: AppColors.muted),
                 ),
                 SelectableText(
                   info.code,
@@ -74,7 +75,7 @@ class _DeviceCodeNoteState extends State<DeviceCodeNote> {
                 const SizedBox(height: 2),
                 Text(
                   widget.help,
-                  style: const TextStyle(fontSize: 13, color: Colors.black54),
+                  style: const TextStyle(fontSize: 13, color: AppColors.muted),
                 ),
               ],
             ),

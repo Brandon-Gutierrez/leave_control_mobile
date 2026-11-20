@@ -7,7 +7,6 @@ abstract final class AppColors {
   static const primaryRed = Color(0xFFD32F2F);
   static const darkText = Color(0xFF111111);
   static const lightBg = Color(0xFFFAFAFA);
-  static const loginBg = Color(0xFFF5F5F5);
 
   // Estados
   static const success = Color(0xFF3F7D4E);
@@ -19,4 +18,13 @@ abstract final class AppColors {
   static const info = Color(0xFF4A4A4A);
   static const infoBg = Color(0xFFF0F0F0);
   static const line = Color(0xFFDDDDDD);
+
+  /// Texto secundario (subtítulos, ayudas).
+  static const muted = Color(0xFF666666);
+
+  /// Borde de los campos de texto.
+  static const fieldLine = Color(0xFFD6D6D6);
+
+  /// Borde de las tarjetas y de los botones de ícono.
+  static const cardLine = Color(0xFFE3E3E3);
 }

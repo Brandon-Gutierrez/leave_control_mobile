@@ -114,7 +114,8 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(tester.takeException(), isNull);
-      expect(find.text('Iniciar Sesión'), findsOneWidget);
+      expect(find.text('Salidas Temporales'), findsOneWidget);
+      expect(find.text('Registra tus salidas y retornos'), findsOneWidget);
       expect(find.text('Ingresar'), findsOneWidget);
     });
 

@@ -4,7 +4,9 @@ import '../../../core/device/device_code_note.dart';
 import '../../../core/device/device_code_service.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_text_styles.dart';
+import '../../../core/widgets/app_logo.dart';
 import '../../../core/widgets/app_popup.dart';
+import '../../../core/widgets/app_primary_button.dart';
 import '../../leave/presentation/home_page.dart';
 import '../data/auth_service.dart';
 
@@ -26,10 +28,6 @@ class _LoginPageState extends State<LoginPage> {
 
   bool _isLoading = false;
   bool _isPasswordObscured = true;
-
-  static const Color primaryRed = AppColors.primaryRed;
-  static const Color darkText = AppColors.darkText;
-  static const Color lightBg = AppColors.loginBg;
 
   @override
   void dispose() {
@@ -69,45 +67,14 @@ class _LoginPageState extends State<LoginPage> {
     }
   }
 
-  InputDecoration _inputDecoration({
-    required String hint,
-    required IconData icon,
-    Widget? suffixIcon,
-  }) {
-    return InputDecoration(
-      hintText: hint,
-      hintStyle: TextStyle(color: Colors.grey.shade400),
-      prefixIcon: Icon(icon, size: 20, color: darkText),
-      suffixIcon: suffixIcon,
-      filled: true,
-      fillColor: Colors.white,
-      contentPadding: const EdgeInsets.symmetric(vertical: 16),
-      enabledBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(10),
-        borderSide: BorderSide(color: Colors.grey.shade300),
-      ),
-      focusedBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(10),
-        borderSide: const BorderSide(color: primaryRed, width: 1.5),
-      ),
-      errorBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(10),
-        borderSide: BorderSide(color: AppColors.danger),
-      ),
-      focusedErrorBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(10),
-        borderSide: const BorderSide(color: primaryRed, width: 1.5),
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     final size = MediaQuery.sizeOf(context);
     final isSmallPhone = size.width < 360 || size.height < 640;
+    final gap = isSmallPhone ? 14.0 : 20.0;
 
     return Scaffold(
-      backgroundColor: lightBg,
+      backgroundColor: AppColors.lightBg,
       body: SafeArea(
         child: Center(
           child: SingleChildScrollView(
@@ -125,33 +92,22 @@ class _LoginPageState extends State<LoginPage> {
                     mainAxisSize: MainAxisSize.min,
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      // Logo
-                      Center(
-                        child: Image.asset(
-                          'rsc/comteco.png',
-                          height: isSmallPhone ? 60 : 80,
-                          fit: BoxFit.contain,
-                          errorBuilder: (_, _, _) => const Icon(
-                            Icons.business_rounded,
-                            size: 64,
-                            color: darkText,
-                          ),
-                        ),
-                      ),
-                      SizedBox(height: isSmallPhone ? 24 : 36),
+                      Center(child: AppLogo(size: isSmallPhone ? 120 : 190)),
+                      SizedBox(height: gap),
 
                       // Título
                       const Text(
-                        'Iniciar Sesión',
+                        'Salidas Temporales',
                         textAlign: TextAlign.center,
-                        style: TextStyle(
-                          fontSize: 24,
-                          fontWeight: FontWeight.w800,
-                          color: darkText,
-                          letterSpacing: -0.5,
-                        ),
+                        style: AppText.display,
                       ),
-                      SizedBox(height: isSmallPhone ? 24 : 32),
+                      const SizedBox(height: 4),
+                      const Text(
+                        'Registra tus salidas y retornos',
+                        textAlign: TextAlign.center,
+                        style: AppText.caption,
+                      ),
+                      SizedBox(height: gap + 4),
 
                       // Campo Usuario
                       TextFormField(
@@ -159,16 +115,23 @@ class _LoginPageState extends State<LoginPage> {
                         keyboardType: TextInputType.text,
                         textInputAction: TextInputAction.next,
                         autofillHints: const [AutofillHints.username],
-                        style: const TextStyle(color: darkText, fontSize: 15),
-                        decoration: _inputDecoration(
-                          hint: 'Usuario',
-                          icon: Icons.person_outline,
+                        style: const TextStyle(
+                          color: AppColors.darkText,
+                          fontSize: 15,
+                        ),
+                        decoration: const InputDecoration(
+                          hintText: 'Usuario',
+                          prefixIcon: Icon(
+                            Icons.person_outline_rounded,
+                            size: 22,
+                            color: AppColors.darkText,
+                          ),
                         ),
                         validator: (v) => (v == null || v.trim().isEmpty)
                             ? 'Campo requerido'
                             : null,
                       ),
-                      const SizedBox(height: 16),
+                      SizedBox(height: gap - 4),
 
                       // Campo Contraseña
                       TextFormField(
@@ -177,17 +140,27 @@ class _LoginPageState extends State<LoginPage> {
                         textInputAction: TextInputAction.done,
                         autofillHints: const [AutofillHints.password],
                         onFieldSubmitted: (_) => _login(),
-                        style: const TextStyle(color: darkText, fontSize: 15),
-                        decoration: _inputDecoration(
-                          hint: 'Contraseña',
-                          icon: Icons.lock_outline,
+                        style: const TextStyle(
+                          color: AppColors.darkText,
+                          fontSize: 15,
+                        ),
+                        decoration: InputDecoration(
+                          hintText: 'Contraseña',
+                          prefixIcon: const Icon(
+                            Icons.lock_outline_rounded,
+                            size: 22,
+                            color: AppColors.darkText,
+                          ),
                           suffixIcon: IconButton(
+                            tooltip: _isPasswordObscured
+                                ? 'Mostrar contraseña'
+                                : 'Ocultar contraseña',
                             icon: Icon(
                               _isPasswordObscured
                                   ? Icons.visibility_outlined
                                   : Icons.visibility_off_outlined,
-                              size: 20,
-                              color: Colors.grey.shade600,
+                              size: 22,
+                              color: AppColors.muted,
                             ),
                             onPressed: () => setState(
                               () => _isPasswordObscured = !_isPasswordObscured,
@@ -197,38 +170,12 @@ class _LoginPageState extends State<LoginPage> {
                         validator: (v) =>
                             (v == null || v.isEmpty) ? 'Campo requerido' : null,
                       ),
-                      const SizedBox(height: 28),
+                      SizedBox(height: gap + 4),
 
-                      // Botón DE INGRESO
-                      SizedBox(
-                        height: AppDimens.buttonHeight,
-                        child: ElevatedButton(
-                          onPressed: _isLoading ? null : _login,
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: primaryRed,
-                            foregroundColor: Colors.white,
-                            elevation: 0,
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(10),
-                            ),
-                          ),
-                          child: _isLoading
-                              ? const SizedBox(
-                                  height: 20,
-                                  width: 20,
-                                  child: CircularProgressIndicator(
-                                    strokeWidth: 2,
-                                    color: Colors.white,
-                                  ),
-                                )
-                              : const Text(
-                                  'Ingresar',
-                                  style: TextStyle(
-                                    fontSize: 15,
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                ),
-                        ),
+                      AppPrimaryButton(
+                        label: 'Ingresar',
+                        loading: _isLoading,
+                        onPressed: _login,
                       ),
                       // Solo aparece si este teléfono ya está vinculado a una
                       // cuenta: quien no pueda ingresar lo dicta a RR. HH.

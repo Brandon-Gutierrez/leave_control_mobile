@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_text_styles.dart';
+import '../../../core/widgets/app_logo.dart';
+import '../../../core/widgets/app_primary_button.dart';
 import '../../leave/presentation/home_page.dart';
 import '../data/auth_service.dart';
 import 'login_page.dart';
@@ -53,7 +55,7 @@ class _SessionGateState extends State<SessionGate> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: AppColors.loginBg,
+      backgroundColor: AppColors.lightBg,
       body: SafeArea(
         child: Center(
           child: _hasNetworkError ? _buildError() : _buildLoading(),
@@ -63,21 +65,12 @@ class _SessionGateState extends State<SessionGate> {
   }
 
   Widget _buildLoading() {
-    return Column(
+    return const Column(
       mainAxisSize: MainAxisSize.min,
       children: [
-        Image.asset(
-          'rsc/comteco.png',
-          height: 60,
-          fit: BoxFit.contain,
-          errorBuilder: (_, _, _) => const Icon(
-            Icons.business_rounded,
-            size: 48,
-            color: AppColors.darkText,
-          ),
-        ),
-        const SizedBox(height: 28),
-        const CircularProgressIndicator(color: AppColors.primaryRed),
+        AppLogo(size: 160),
+        SizedBox(height: 20),
+        CircularProgressIndicator(color: AppColors.primaryRed),
       ],
     );
   }
@@ -102,17 +95,10 @@ class _SessionGateState extends State<SessionGate> {
             style: AppText.caption,
           ),
           const SizedBox(height: 20),
-          SizedBox(
-            height: AppDimens.buttonHeight,
-            child: ElevatedButton.icon(
-              onPressed: _check,
-              icon: const Icon(Icons.refresh_rounded),
-              label: const Text('Reintentar'),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: AppColors.primaryRed,
-                foregroundColor: Colors.white,
-              ),
-            ),
+          AppPrimaryButton(
+            label: 'Reintentar',
+            icon: Icons.refresh_rounded,
+            onPressed: _check,
           ),
           const SizedBox(height: 8),
           TextButton(

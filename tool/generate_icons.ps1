@@ -96,5 +96,8 @@ foreach ($file in $sizes.Keys) {
     Save-Icon (Join-Path $ios $file) $sizes[$file] $fullScale $false
 }
 
+# Versión sin fondo (para usar sobre superficies claras en maquetas y documentos).
+Save-Icon (Join-Path $root 'tool/icon/app_icon_transparent.png') 1024 0.92 $true
+
 $logo.Dispose()
 Write-Host 'Íconos generados.'
