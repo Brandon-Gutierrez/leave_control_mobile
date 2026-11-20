@@ -27,4 +27,10 @@ abstract final class AppColors {
 
   /// Borde de las tarjetas y de los botones de ícono.
   static const cardLine = Color(0xFFE3E3E3);
+
+  /// Fondo suave dentro de una tarjeta (p. ej. el recuadro de horas).
+  static const softSurface = Color(0xFFF4F4F4);
+
+  /// Rótulos pequeños en mayúsculas (SALIDA, RETORNO…).
+  static const label = Color(0xFF777777);
 }

@@ -10,6 +10,9 @@ import 'package:control_input_output/features/leave/models/qr_scan_result.dart';
 import 'package:control_input_output/features/leave/presentation/date_range_sheet.dart';
 import 'package:control_input_output/features/leave/presentation/home_page.dart';
 import 'package:control_input_output/features/leave/presentation/reasons_page.dart';
+import 'package:control_input_output/features/leave/presentation/scan_page.dart';
+import 'package:control_input_output/features/leave/presentation/widgets/trip_card.dart';
+import 'package:control_input_output/features/leave/presentation/widgets/week_strip.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -137,8 +140,10 @@ void main() {
       await _settle(tester);
 
       expect(tester.takeException(), isNull);
-      expect(find.text('Juan Pérez'), findsOneWidget);
-      expect(find.text('Registrar mi salida'), findsOneWidget);
+      expect(find.text('Hola, Juan Pérez'), findsOneWidget);
+      expect(find.text('Estás dentro'), findsOneWidget);
+      expect(find.text('Registrar salida'), findsOneWidget);
+      expect(find.text('Dispositivo'), findsOneWidget);
 
       await _tearDownTimers(tester);
     });
@@ -168,9 +173,10 @@ void main() {
         await _settle(tester);
 
         expect(tester.takeException(), isNull);
-        expect(find.text('Registrar mi retorno'), findsOneWidget);
+        expect(find.text('Registrar retorno'), findsOneWidget);
+        expect(find.text('Estás fuera'), findsOneWidget);
         expect(find.textContaining('Trámite bancario'), findsOneWidget);
-        expect(find.text('Tiempo transcurrido'), findsOneWidget);
+        expect(find.text('transcurrido'), findsOneWidget);
 
         await _tearDownTimers(tester);
       },
@@ -331,58 +337,137 @@ void main() {
     await _tearDownTimers(tester);
   });
 
-  testWidgets(
-    'HomePage muestra el detalle de cada salida bajo las estadísticas',
-    (tester) async {
-      tester.view.physicalSize = _phoneSizes['iPhone 13 mini']!;
-      tester.view.devicePixelRatio = 1.0;
-      addTearDown(tester.view.reset);
+  // Jueves 19/11/2026, 12:00: con un reloj fijo los días de la semana y los
+  // textos «Hoy» / «Ayer» no dependen del día en que se corran las pruebas.
+  DateTime fixedNow() => DateTime(2026, 11, 19, 12);
 
-      final api =
-          _FakeLeaveService(
-              leaveStatusResponse: {
-                'name': 'Juan Pérez',
-                'isLeave': false,
-                'stats': {
-                  'day': {'exits': 2, 'minutes': 75},
-                },
-              },
-            )
-            ..detailsResponse = [
-              LeaveDetail(
-                leftAt: DateTime(2026, 3, 2, 14, 0),
-                premise: 'Prado',
-                reason: 'Cita médica',
-              ),
-              LeaveDetail(
-                leftAt: DateTime(2026, 3, 2, 10, 30),
-                returnedAt: DateTime(2026, 3, 2, 11, 15),
-                premise: 'Central',
-                reason: 'Trámite bancario',
-                minutes: 45,
-              ),
-            ];
-      await tester.pumpWidget(
-        MaterialApp(
-          home: HomePage(leaveService: api, deviceCodeLoader: _noDeviceCode),
+  Future<void> pumpHome(
+    WidgetTester tester,
+    LeaveService api, {
+    Future<DeviceCodeInfo?> Function()? deviceCodeLoader,
+  }) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        locale: const Locale('es'),
+        supportedLocales: const [Locale('es')],
+        localizationsDelegates: GlobalMaterialLocalizations.delegates,
+        home: HomePage(
+          leaveService: api,
+          deviceCodeLoader: deviceCodeLoader ?? _noDeviceCode,
+          clock: fixedNow,
         ),
-      );
-      await _settle(tester);
-      await tester.pump();
+      ),
+    );
+    await _settle(tester);
+    await tester.pump();
+  }
 
-      expect(find.text('Detalle de tus salidas'), findsOneWidget);
-      // Salida completa: predio, motivo, de qué hora a qué hora y duración.
-      expect(find.text('Salida de Central'), findsOneWidget);
-      expect(find.text('Motivo: Trámite bancario'), findsOneWidget);
-      expect(find.text('De 10:30 a 11:15'), findsOneWidget);
-      expect(find.text('45 min'), findsOneWidget);
-      // Salida sin retorno: se indica que sigue fuera.
-      expect(find.text('Salida de Prado'), findsOneWidget);
-      expect(find.text('Desde las 14:00 · sigue fuera'), findsOneWidget);
-    },
-  );
+  void phone(WidgetTester tester, [String name = 'iPhone 13 mini']) {
+    tester.view.physicalSize = _phoneSizes[name]!;
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+  }
 
-  testWidgets('HomePage sin salidas no muestra el detalle', (tester) async {
+  testWidgets('HomePage muestra cada salida con sus horas y su duración', (
+    tester,
+  ) async {
+    phone(tester);
+    final api =
+        _FakeLeaveService(
+            leaveStatusResponse: {
+              'name': 'Juan Pérez',
+              'isLeave': false,
+              'stats': {
+                'day': {'exits': 2, 'minutes': 75},
+              },
+            },
+          )
+          ..detailsResponse = [
+            LeaveDetail(
+              leftAt: DateTime(2026, 11, 19, 11, 30),
+              returnedAt: DateTime(2026, 11, 19, 12, 15),
+              premise: 'Central',
+              reason: 'Trámite bancario',
+              minutes: 45,
+            ),
+            LeaveDetail(
+              leftAt: DateTime(2026, 11, 19, 8, 10),
+              returnedAt: DateTime(2026, 11, 19, 8, 40),
+              premise: 'Prado',
+              reason: 'Cita médica',
+              minutes: 30,
+            ),
+          ];
+    await pumpHome(tester, api);
+
+    expect(find.text('Detalle de tus salidas'), findsOneWidget);
+    expect(
+      find.text('Hoy saliste 2 veces · 1 h 15 min fuera en total'),
+      findsOneWidget,
+    );
+    // Salida completa: predio, motivo, de qué hora a qué hora y duración.
+    expect(find.text('Central'), findsOneWidget);
+    expect(find.text('Motivo: Trámite bancario'), findsOneWidget);
+    expect(find.text('11:30'), findsOneWidget);
+    expect(find.text('12:15'), findsOneWidget);
+    expect(find.text('45 min'), findsOneWidget);
+    expect(find.text('Completada'), findsNWidgets(2));
+    expect(find.text('Prado'), findsOneWidget);
+    expect(find.text('30 min'), findsOneWidget);
+    // Hoy no hay estado de salida ni último retorno inventado.
+    expect(find.text('Último retorno a las 12:15'), findsOneWidget);
+
+    await _tearDownTimers(tester);
+  });
+
+  testWidgets('HomePage: una salida sin retorno de hoy pide escanear el QR', (
+    tester,
+  ) async {
+    phone(tester);
+    final api =
+        _FakeLeaveService(
+            leaveStatusResponse: {
+              'name': 'Juan Pérez',
+              'isLeave': true,
+              'dateLeave': DateTime(2026, 11, 19, 10, 30).toIso8601String(),
+              'reason': 'Trámite bancario',
+              'stats': {
+                'day': {'exits': 1, 'minutes': 90},
+              },
+            },
+          )
+          ..detailsResponse = [
+            LeaveDetail(
+              leftAt: DateTime(2026, 11, 19, 10, 30),
+              premise: 'Prado',
+              reason: 'Trámite bancario',
+            ),
+          ];
+    await pumpHome(tester, api);
+
+    // Tarjeta de estado: desde cuándo, de qué predio y por qué motivo.
+    expect(find.text('Estás fuera'), findsOneWidget);
+    expect(find.text('Desde las 10:30 · Prado'), findsOneWidget);
+    expect(find.text('01:30:00'), findsOneWidget);
+    expect(
+      find.text('Hoy saliste 1 vez · 1 h 30 min fuera hasta ahora'),
+      findsOneWidget,
+    );
+    // Tarjeta de la salida: sigue fuera y qué hacer.
+    expect(find.text('Sigue fuera'), findsOneWidget);
+    expect(find.text('Pendiente'), findsOneWidget);
+    expect(
+      find.text('Escanea el QR del predio para registrar tu retorno.'),
+      findsOneWidget,
+    );
+
+    await _tearDownTimers(tester);
+  });
+
+  testWidgets('HomePage dentro sin salidas avisa cómo registrar la próxima', (
+    tester,
+  ) async {
+    phone(tester);
     final api = _FakeLeaveService(
       leaveStatusResponse: {
         'name': 'Juan Pérez',
@@ -392,15 +477,17 @@ void main() {
         },
       },
     );
-    await tester.pumpWidget(
-      MaterialApp(
-        home: HomePage(leaveService: api, deviceCodeLoader: _noDeviceCode),
-      ),
-    );
-    await _settle(tester);
-    await tester.pump();
+    await pumpHome(tester, api);
 
-    expect(find.text('Detalle de tus salidas'), findsNothing);
+    expect(find.text('Estás dentro'), findsOneWidget);
+    expect(
+      find.text('Cuando salgas, escanea el QR del predio.'),
+      findsOneWidget,
+    );
+    expect(find.text('Hoy aún no has salido'), findsOneWidget);
+    expect(find.byType(TripCard), findsNothing);
+
+    await _tearDownTimers(tester);
   });
 
   testWidgets('HomePage filtra tus salidas por un rango del calendario', (
@@ -408,10 +495,7 @@ void main() {
   ) async {
     // El calendario es una hoja inferior alta: en la superficie por defecto
     // (800x600) el botón "Aplicar" queda fuera de la pantalla.
-    tester.view.physicalSize = _phoneSizes['iPhone 13 mini']!;
-    tester.view.devicePixelRatio = 1.0;
-    addTearDown(tester.view.reset);
-
+    phone(tester);
     final api = _FakeLeaveService(
       leaveStatusResponse: {
         'name': 'Juan Pérez',
@@ -421,25 +505,20 @@ void main() {
         },
       },
     );
-    await tester.pumpWidget(
-      MaterialApp(
-        locale: const Locale('es'),
-        supportedLocales: const [Locale('es')],
-        localizationsDelegates: GlobalMaterialLocalizations.delegates,
-        home: HomePage(leaveService: api, deviceCodeLoader: _noDeviceCode),
-      ),
-    );
-    await _settle(tester);
+    await pumpHome(tester, api);
     // Por defecto muestra hoy, con los contadores del día.
-    expect(find.text('Hoy'), findsOneWidget);
-    expect(find.text('10 min'), findsOneWidget);
-    expect(find.text('Día siguiente'), findsNothing);
+    expect(find.text('Jueves 19 de noviembre'), findsOneWidget);
+    expect(
+      find.text('Hoy saliste 1 vez · 10 min fuera en total'),
+      findsOneWidget,
+    );
+    expect(find.text('Volver a hoy'), findsNothing);
 
     await tester.tap(find.byTooltip('Elegir fecha'));
     await tester.pumpAndSettle();
     expect(find.text('Elige una fecha'), findsOneWidget);
 
-    // Un solo día: se toca dos veces el mismo día y se aplica.
+    // Un solo día: se toca el día 1 y se aplica.
     final firstOfMonth = find.descendant(
       of: find.byType(DateRangeSheet),
       matching: find.text('1'),
@@ -450,17 +529,96 @@ void main() {
     await tester.pumpAndSettle();
     await _settle(tester);
 
-    if (DateTime.now().day != 1) {
-      expect(api.requestedRange, isNotNull);
-      expect(api.requestedRange!.start, api.requestedRange!.end);
-      expect(find.text('45 min'), findsOneWidget); // tiempo del día elegido
-      expect(find.text('Hoy'), findsNothing);
-    }
+    expect(api.requestedRange, isNotNull);
+    expect(api.requestedRange!.start, DateTime(2026, 11, 1));
+    expect(api.requestedRange!.end, DateTime(2026, 11, 1));
+    expect(find.text('Domingo 1 de noviembre'), findsOneWidget);
+    expect(
+      find.text('El 01/11/2026 saliste 3 veces · 45 min fuera en total'),
+      findsOneWidget,
+    );
 
     await tester.tap(find.text('Volver a hoy'));
     await tester.pump();
-    expect(find.text('Hoy'), findsOneWidget);
-    expect(find.text('10 min'), findsOneWidget);
+    expect(find.text('Jueves 19 de noviembre'), findsOneWidget);
+    expect(
+      find.text('Hoy saliste 1 vez · 10 min fuera en total'),
+      findsOneWidget,
+    );
+
+    await _tearDownTimers(tester);
+  });
+
+  testWidgets('La tira de la semana elige un día y no deja elegir el futuro', (
+    tester,
+  ) async {
+    phone(tester);
+    final api = _FakeLeaveService(
+      leaveStatusResponse: {'name': 'Juan Pérez', 'isLeave': false},
+    );
+    await pumpHome(tester, api);
+
+    // Lunes a domingo de la semana de hoy (jueves 19).
+    for (final day in [16, 17, 18, 19, 20, 21, 22]) {
+      expect(
+        find.byKey(WeekStrip.dayKey(DateTime(2026, 11, day))),
+        findsOneWidget,
+      );
+    }
+
+    await tester.tap(find.byKey(WeekStrip.dayKey(DateTime(2026, 11, 18))));
+    await tester.pump();
+    await tester.pump();
+    expect(api.requestedRange!.start, DateTime(2026, 11, 18));
+    expect(find.text('Miércoles 18 de noviembre'), findsOneWidget);
+    expect(
+      find.text('Ayer saliste 3 veces · 45 min fuera en total'),
+      findsOneWidget,
+    );
+
+    // Un día futuro no se puede elegir.
+    api.requestedRange = null;
+    await tester.tap(find.byKey(WeekStrip.dayKey(DateTime(2026, 11, 20))));
+    await tester.pump();
+    expect(api.requestedRange, isNull);
+    expect(find.text('Miércoles 18 de noviembre'), findsOneWidget);
+
+    // Tocar hoy vuelve a la vista de hoy.
+    await tester.tap(find.byKey(WeekStrip.dayKey(DateTime(2026, 11, 19))));
+    await tester.pump();
+    expect(find.text('Volver a hoy'), findsNothing);
+    expect(find.text('Jueves 19 de noviembre'), findsOneWidget);
+
+    await _tearDownTimers(tester);
+  });
+
+  testWidgets('Una salida sin retorno de otro día se marca «Sin retorno»', (
+    tester,
+  ) async {
+    phone(tester);
+    final api = _FakeLeaveService(
+      leaveStatusResponse: {'name': 'Juan Pérez', 'isLeave': false},
+    );
+    await pumpHome(tester, api);
+
+    api.detailsResponse = [
+      LeaveDetail(
+        leftAt: DateTime(2026, 11, 18, 15, 0),
+        premise: 'Prado',
+        reason: 'Cita médica',
+      ),
+    ];
+    await tester.tap(find.byKey(WeekStrip.dayKey(DateTime(2026, 11, 18))));
+    await tester.pump();
+    await tester.pump();
+    await tester.pump();
+
+    expect(find.text('Sin retorno'), findsOneWidget);
+    expect(find.text('Sigue fuera'), findsNothing);
+    expect(
+      find.textContaining('No se incluye en tus contadores'),
+      findsOneWidget,
+    );
 
     await _tearDownTimers(tester);
   });
@@ -468,6 +626,7 @@ void main() {
   testWidgets('Las salidas sin retorno siguen el rango elegido', (
     tester,
   ) async {
+    phone(tester);
     final api = _FakeLeaveService(
       leaveStatusResponse: {
         'name': 'Juan Pérez',
@@ -477,13 +636,8 @@ void main() {
           {'date': '2026-09-10T09:00:00', 'reason': 'Trámite bancario'},
         ],
       },
-    );
-    await tester.pumpWidget(
-      MaterialApp(
-        home: HomePage(leaveService: api, deviceCodeLoader: _noDeviceCode),
-      ),
-    );
-    await _settle(tester);
+    )..detailsResponse = null; // sin detalle: se usan los avisos del rango
+    await pumpHome(tester, api);
 
     // Vista de hoy: sin advertencias de otras fechas.
     expect(find.text('Salida sin retorno'), findsNothing);
@@ -491,16 +645,16 @@ void main() {
 
     // Un rango sin salidas sin retorno: no se muestra ninguna advertencia.
     api.rangeResponse = const LeaveStat(2, 30);
-    await tester.tap(find.byTooltip('Día anterior'));
+    await tester.tap(find.byKey(WeekStrip.dayKey(DateTime(2026, 11, 17))));
     await tester.pump();
     await tester.pump();
     expect(find.text('Salida sin retorno'), findsNothing);
 
     // Un rango que sí incluye una: aparece solo esa.
     api.rangeResponse = LeaveStat(1, 20, [
-      UnreturnedLeave(DateTime(2026, 9, 15, 8, 30), 'Cita médica'),
+      UnreturnedLeave(DateTime(2026, 11, 18, 8, 30), 'Cita médica'),
     ]);
-    await tester.tap(find.byTooltip('Día anterior'));
+    await tester.tap(find.byKey(WeekStrip.dayKey(DateTime(2026, 11, 18))));
     await tester.pump();
     await tester.pump();
     expect(find.text('Salida sin retorno'), findsOneWidget);
@@ -510,27 +664,114 @@ void main() {
     await _tearDownTimers(tester);
   });
 
-  testWidgets('HomePage navega día a día con las flechas', (tester) async {
+  for (final entry in _phoneSizes.entries) {
+    testWidgets('HomePage con textos largos y varias salidas no desborda en '
+        '${entry.key}', (tester) async {
+      phone(tester, entry.key);
+      final api =
+          _FakeLeaveService(
+              leaveStatusResponse: {
+                'name': 'María Fernanda Rodríguez de la Quintana',
+                'role': 'EMPLOYEE',
+                'job_title': 'Técnico de Redes y Telecomunicaciones',
+                'isLeave': true,
+                'dateLeave': DateTime(2026, 11, 18, 22, 5).toIso8601String(),
+                'reason': 'Reunión externa con proveedores del servicio',
+                'stats': {
+                  'day': {'exits': 3, 'minutes': 205},
+                },
+              },
+            )
+            ..detailsResponse = [
+              LeaveDetail(
+                leftAt: DateTime(2026, 11, 19, 10, 30),
+                premise: 'Predio Central Norte del Departamento de La Paz',
+                reason: 'Reunión externa con proveedores del servicio',
+              ),
+              LeaveDetail(
+                leftAt: DateTime(2026, 11, 19, 8, 5),
+                returnedAt: DateTime(2026, 11, 19, 9, 30),
+                premise: 'Prado',
+                reason: 'Cita médica',
+                minutes: 85,
+              ),
+              LeaveDetail(
+                leftAt: DateTime(2026, 11, 18, 23, 50),
+                returnedAt: DateTime(2026, 11, 19, 0, 20),
+                premise: 'Central',
+                reason: 'Trámite bancario',
+                minutes: 30,
+              ),
+            ];
+      await pumpHome(tester, api);
+      await tester.drag(
+        find.byType(SingleChildScrollView).first,
+        const Offset(0, -2000),
+      );
+      await tester.pump();
+
+      expect(tester.takeException(), isNull);
+      expect(find.byType(TripCard), findsNWidgets(3));
+
+      await _tearDownTimers(tester);
+    });
+  }
+
+  testWidgets('La barra inferior cambia a Dispositivo y vuelve a Inicio', (
+    tester,
+  ) async {
+    phone(tester);
     final api = _FakeLeaveService(
       leaveStatusResponse: {'name': 'Juan Pérez', 'isLeave': false},
     );
+    await pumpHome(
+      tester,
+      api,
+      deviceCodeLoader: () async =>
+          const DeviceCodeInfo(code: 'K7M4-Q9XB', linked: true),
+    );
+
+    // El código del teléfono ya no aparece en Inicio.
+    expect(find.text('Mi dispositivo'), findsNothing);
+    expect(find.text('K7M4-Q9XB'), findsNothing);
+
+    await tester.tap(find.text('Dispositivo'));
+    await tester.pump();
+    await tester.pump();
+    expect(find.text('Mi dispositivo'), findsOneWidget);
+    expect(find.text('K7M4-Q9XB'), findsOneWidget);
+    expect(find.text('Hola, Juan Pérez'), findsNothing);
+
+    await tester.tap(find.text('Inicio'));
+    await tester.pump();
+    expect(find.text('Hola, Juan Pérez'), findsOneWidget);
+    expect(find.text('Mi dispositivo'), findsNothing);
+
+    await _tearDownTimers(tester);
+  });
+
+  testWidgets('El botón de escanear no responde mientras carga', (
+    tester,
+  ) async {
+    phone(tester);
+    final pending = Completer<LeaveStatus?>();
     await tester.pumpWidget(
       MaterialApp(
-        home: HomePage(leaveService: api, deviceCodeLoader: _noDeviceCode),
+        home: HomePage(
+          leaveService: _SlowFakeLeaveService(pending.future),
+          deviceCodeLoader: _noDeviceCode,
+          clock: fixedNow,
+        ),
       ),
     );
+    await tester.pump();
+
+    await tester.tap(find.text('Registrar salida'));
+    await tester.pump();
+    expect(find.byType(ScanPage), findsNothing);
+
+    pending.complete(LeaveStatus.fromJson({'name': 'Juan', 'isLeave': false}));
     await _settle(tester);
-
-    await tester.tap(find.byTooltip('Día anterior'));
-    await tester.pump();
-    await tester.pump();
-    expect(find.text('Ayer'), findsOneWidget);
-    expect(find.text('3'), findsOneWidget); // salidas del fake
-
-    await tester.tap(find.byTooltip('Día siguiente'));
-    await tester.pump();
-    expect(find.text('Hoy'), findsOneWidget);
-
     await _tearDownTimers(tester);
   });
 
@@ -558,7 +799,8 @@ void main() {
       await _settle(tester);
 
       expect(tester.takeException(), isNull);
-      expect(find.text('Registrar mi salida'), findsOneWidget);
+      expect(find.text('Registrar salida'), findsOneWidget);
+      expect(find.text('Estás dentro'), findsOneWidget);
 
       await _tearDownTimers(tester);
     },

@@ -2,19 +2,28 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
-import '../../../core/device/device_code_note.dart';
 import '../../../core/device/device_code_service.dart';
+import '../../../core/format/date_text.dart';
 import '../../../core/network/api_exceptions.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_text_styles.dart';
+import '../../../core/widgets/app_bottom_bar.dart';
+import '../../../core/widgets/app_logo.dart';
 import '../../../core/widgets/app_popup.dart';
+import '../../../core/widgets/app_primary_button.dart';
 import '../../auth/data/auth_service.dart';
 import '../../auth/presentation/login_page.dart';
+import '../../device/presentation/device_tab.dart';
 import '../data/leave_service.dart';
 import '../models/leave_status.dart';
 import 'date_range_sheet.dart';
 import 'scan_page.dart';
+import 'widgets/status_card.dart';
+import 'widgets/trip_card.dart';
+import 'widgets/week_strip.dart';
 
+/// Pantalla principal: barra inferior con Inicio, el botón para escanear el QR
+/// y Dispositivo. Aquí vive el estado de la persona y el detalle de sus salidas.
 class HomePage extends StatefulWidget {
   /// Permiten inyectar servicios de prueba (p. ej. en tests de widgets).
   final LeaveService? leaveService;
@@ -23,11 +32,16 @@ class HomePage extends StatefulWidget {
   /// Permite inyectar la consulta del código de dispositivo (pruebas).
   final Future<DeviceCodeInfo?> Function()? deviceCodeLoader;
 
+  /// Reloj de la pantalla (pruebas): decide qué día es «hoy» sin depender de
+  /// la fecha real del equipo.
+  final DateTime Function()? clock;
+
   const HomePage({
     super.key,
     this.leaveService,
     this.authService,
     this.deviceCodeLoader,
+    this.clock,
   });
 
   @override
@@ -41,30 +55,31 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   String? _reason;
   String? _role;
   String? _jobTitle;
-  String? _photoUrl;
   Map<String, LeaveStat> _stats = {};
 
-  /// Fechas elegidas en el calendario; null = hoy (siempre al día).
+  /// Fechas elegidas (tira de días o calendario); null = hoy (siempre al día).
   DateTimeRange? _range;
   LeaveStat? _rangeStat;
   bool _rangeLoading = false;
 
-  /// Detalle de las salidas de la fecha o rango mostrado; null mientras carga
-  /// o si no se pudo consultar (en ese caso la sección simplemente no aparece).
-  List<LeaveDetail>? _details;
+  /// Salidas de hoy: alimentan la tarjeta de estado (predio de la salida en
+  /// curso, último retorno) y la lista cuando se está viendo hoy. Null mientras
+  /// carga o si no se pudo consultar (la sección simplemente no aparece).
+  List<LeaveDetail>? _todayDetails;
+
+  /// Salidas del rango elegido (cuando no se está viendo hoy).
+  List<LeaveDetail>? _rangeDetails;
 
   bool _isLeave = false;
   bool _isLoading = true;
   bool _hasError = false;
-  Timer? _timer;
-  Duration _duration = Duration.zero;
-  DateTime? _startDate;
-  String? _dateLeave;
 
-  // Paleta de colores
-  static const primaryRed = AppColors.primaryRed;
-  static const darkText = AppColors.darkText;
-  static const lightBg = AppColors.lightBg;
+  /// Cuándo salió, si está fuera.
+  DateTime? _leftAt;
+
+  /// 0 = Inicio, 1 = Dispositivo. La pestaña Dispositivo se crea al abrirla.
+  int _tab = 0;
+  bool _deviceTabOpened = false;
 
   @override
   //El estado inicial carga los datos del usuario
@@ -78,6 +93,12 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) unawaited(_loadUserData());
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
   }
 
   Future<void> _loadUserData() async {
@@ -105,16 +126,19 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         _isLoading = false;
         _name = status.name;
         _isLeave = status.isLeave;
-        _dateLeave = status.dateLeave;
+        _leftAt = status.dateLeave == null
+            ? null
+            : DateTime.tryParse(status.dateLeave!)?.toLocal();
         _reason = status.reason;
         _role = status.role;
         _jobTitle = status.jobTitle;
-        _photoUrl = status.photoUrl;
         _stats = status.stats;
       });
-      _initTimer();
-      unawaited(_loadDetails());
-      if (_range != null) unawaited(_loadRange(_range!));
+      unawaited(_loadTodayDetails());
+      if (_range != null) {
+        unawaited(_loadRange(_range!));
+        unawaited(_loadRangeDetails());
+      }
     } on SessionExpiredException catch (e) {
       _goToLogin(e.message);
     }
@@ -125,13 +149,15 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   List<UnreturnedLeave> get _visibleUnreturned =>
       _range != null ? (_rangeStat?.unreturnedLeaves ?? const []) : const [];
 
-  static DateTime _dateOnly(DateTime d) => DateTime(d.year, d.month, d.day);
+  DateTime _now() => (widget.clock ?? DateTime.now)();
+
+  static DateTime _dateOnly(DateTime d) => DateText.dateOnly(d);
 
   static bool _isSingleDay(DateTimeRange r) =>
       _dateOnly(r.start) == _dateOnly(r.end);
 
   Future<void> _pickRange() async {
-    final today = _dateOnly(DateTime.now());
+    final today = _dateOnly(_now());
     final picked = await showDateRangeSheet(
       context,
       initial: _range ?? DateTimeRange(start: today, end: today),
@@ -144,15 +170,12 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     );
   }
 
-  /// Mueve la fecha un día; al llegar a hoy vuelve al modo "hoy".
-  void _shiftDay(int delta) {
-    final base = _range?.start ?? _dateOnly(DateTime.now());
-    final day = DateTime(base.year, base.month, base.day + delta);
-    _showRange(DateTimeRange(start: day, end: day));
-  }
+  /// Elegir un día de la tira de la semana.
+  void _selectDay(DateTime day) =>
+      _showRange(DateTimeRange(start: day, end: day));
 
   void _showRange(DateTimeRange range) {
-    final today = _dateOnly(DateTime.now());
+    final today = _dateOnly(_now());
     if (_isSingleDay(range) && !range.start.isBefore(today)) {
       _clearRange();
       return;
@@ -160,25 +183,36 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     setState(() {
       _range = range;
       _rangeStat = null;
-      _details = null;
+      _rangeDetails = null;
     });
     unawaited(_loadRange(range));
-    unawaited(_loadDetails());
+    unawaited(_loadRangeDetails());
   }
 
-  /// Carga el detalle de las salidas de la fecha o rango que se está viendo
-  /// (hoy si no hay rango). Si falla no molesta: la sección no se muestra.
-  Future<void> _loadDetails() async {
+  /// Salidas de hoy. Si falla no molesta: las secciones que las usan no
+  /// aparecen.
+  Future<void> _loadTodayDetails() async {
+    final today = _dateOnly(_now());
+    try {
+      final details = await _leaveService.fetchLeaveDetails(today, today);
+      if (!mounted) return;
+      setState(() => _todayDetails = details);
+    } on SessionExpiredException catch (e) {
+      _goToLogin(e.message);
+    }
+  }
+
+  /// Salidas del rango que se está viendo.
+  Future<void> _loadRangeDetails() async {
     final requested = _range;
-    final today = _dateOnly(DateTime.now());
-    final span = requested ?? DateTimeRange(start: today, end: today);
+    if (requested == null) return;
     try {
       final details = await _leaveService.fetchLeaveDetails(
-        span.start,
-        span.end,
+        requested.start,
+        requested.end,
       );
       if (!mounted || _range != requested) return;
-      setState(() => _details = details);
+      setState(() => _rangeDetails = details);
     } on SessionExpiredException catch (e) {
       _goToLogin(e.message);
     }
@@ -204,31 +238,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       _range = null;
       _rangeStat = null;
       _rangeLoading = false;
-      _details = null;
+      _rangeDetails = null;
     });
-    unawaited(_loadDetails());
-  }
-
-  String _formatDay(DateTime d) =>
-      '${_twoDigits(d.day)}/${_twoDigits(d.month)}/${d.year}';
-
-  /// "Hoy", "Ayer", una fecha o un rango, según lo elegido.
-  String _rangeTitle() {
-    final r = _range;
-    if (r == null) return 'Hoy';
-    if (!_isSingleDay(r)) {
-      return '${_formatDay(r.start)} – ${_formatDay(r.end)}';
-    }
-    final today = _dateOnly(DateTime.now());
-    final yesterday = DateTime(today.year, today.month, today.day - 1);
-    return r.start == yesterday ? 'Ayer' : _formatDay(r.start);
-  }
-
-  String _formatMinutes(int minutes) {
-    if (minutes < 60) return '$minutes min';
-    final h = minutes ~/ 60;
-    final m = minutes % 60;
-    return m == 0 ? '$h h' : '$h h $m min';
   }
 
   void _showSnackBar(String message) {
@@ -236,54 +247,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     showErrorPopup(context, message);
   }
 
-  void _initTimer() {
-    _timer?.cancel();
-    if (!_isLeave || _dateLeave == null) {
-      _startDate = null;
-      return;
-    }
-    _startDate = DateTime.parse(_dateLeave!).toLocal();
-
-    _updateDuration();
-
-    _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
-      _updateDuration();
-    });
-  }
-
-  void _updateDuration() {
-    if (_startDate != null && mounted) {
-      final now = DateTime.now();
-      setState(() {
-        final difference = now.difference(_startDate!);
-        _duration = difference.isNegative ? Duration.zero : difference;
-      });
-    }
-  }
-
   Future<void> _refreshData() => _loadUserData();
-
-  @override
-  void dispose() {
-    WidgetsBinding.instance.removeObserver(this);
-    _timer?.cancel();
-    super.dispose();
-  }
-
-  String _twoDigits(int n) => n.toString().padLeft(2, '0');
-
-  String _formatLeaveText(String? rawDate) {
-    if (rawDate == null || rawDate.isEmpty) return '';
-    final date = DateTime.parse(rawDate).toLocal();
-    final year = date.year;
-    final month = _twoDigits(date.month);
-    final day = _twoDigits(date.day);
-    final hour = _twoDigits(date.hour);
-    final minute = _twoDigits(date.minute);
-    final second = _twoDigits(date.second);
-
-    return 'Saliste el $day/$month/$year a las $hour:$minute:$second';
-  }
 
   Future<void> _closeSession() async {
     await _authService.logout();
@@ -311,41 +275,120 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     if (mounted) unawaited(_loadUserData());
   }
 
+  void _selectTab(int index) {
+    setState(() {
+      _tab = index;
+      if (index == 1) _deviceTabOpened = true;
+    });
+  }
+
+  // ---------------------------------------------------------------------
+  // Datos derivados
+  // ---------------------------------------------------------------------
+
+  /// Salidas de la fecha o rango que se está viendo.
+  List<LeaveDetail>? get _shownDetails =>
+      _range == null ? _todayDetails : _rangeDetails;
+
+  /// Predio de la salida en curso (si se conoce).
+  String? get _currentPremise =>
+      _todayDetails?.where((d) => d.isOpen).map((d) => d.premise).firstOrNull;
+
+  /// Hora del último retorno de hoy.
+  DateTime? get _lastReturnToday {
+    final now = _now();
+    DateTime? last;
+    for (final d in _todayDetails ?? const <LeaveDetail>[]) {
+      final r = d.returnedAt;
+      if (r != null &&
+          DateText.sameDay(r, now) &&
+          (last == null || r.isAfter(last))) {
+        last = r;
+      }
+    }
+    return last;
+  }
+
+  String get _dateTitle {
+    final r = _range;
+    if (r == null) return DateText.longDate(_now());
+    if (_isSingleDay(r)) return DateText.longDate(r.start);
+    return '${DateText.dayMonthYear(r.start)} – ${DateText.dayMonthYear(r.end)}';
+  }
+
+  /// «Hoy saliste 2 veces · 1 h 25 min fuera en total».
+  String? get _summary {
+    final range = _range;
+    if (range != null && _rangeLoading) return 'Consultando…';
+    final stat = range != null ? _rangeStat : _stats['day'];
+    if (stat == null) return null;
+
+    final String when;
+    if (range == null) {
+      when = 'Hoy';
+    } else if (_isSingleDay(range)) {
+      final today = _dateOnly(_now());
+      final yesterday = DateTime(today.year, today.month, today.day - 1);
+      when = range.start == yesterday
+          ? 'Ayer'
+          : 'El ${DateText.dayMonthYear(range.start)}';
+    } else {
+      when =
+          'Del ${DateText.dayMonthYear(range.start)} '
+          'al ${DateText.dayMonthYear(range.end)}';
+    }
+
+    final exits = stat.exits ?? 0;
+    if (exits == 0) {
+      return range == null ? 'Hoy aún no has salido' : '$when no saliste';
+    }
+    final times = exits == 1 ? '1 vez' : '$exits veces';
+    final minutes = stat.minutes;
+    final away = minutes == null
+        ? ''
+        : ' · ${DateText.duration(minutes)} fuera '
+              '${range == null && _isLeave ? 'hasta ahora' : 'en total'}';
+    return '$when saliste $times$away';
+  }
+
+  // ---------------------------------------------------------------------
+  // Pantalla
+  // ---------------------------------------------------------------------
+
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: lightBg,
-      appBar: AppBar(
-        title: const FittedBox(
-          fit: BoxFit.scaleDown,
-          child: Text(
-            'REGISTRO DE SALIDAS TEMPORALES',
-            style: TextStyle(
-              color: darkText,
-              fontSize: 18,
-              fontWeight: FontWeight.bold,
-            ),
+    final ready = !_isLoading && !_hasError;
+    return PopScope(
+      // Atrás desde Dispositivo vuelve a Inicio en vez de salir de la app.
+      canPop: _tab == 0,
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop) setState(() => _tab = 0);
+      },
+      child: Scaffold(
+        backgroundColor: AppColors.lightBg,
+        extendBody: true,
+        // Nunca queda una pantalla en blanco: siempre hay una vista de carga,
+        // de error con reintento, o el contenido ya cargado.
+        body: SafeArea(
+          bottom: false,
+          child: IndexedStack(
+            index: _tab,
+            children: [
+              _isLoading ? _buildLoadingView() : _buildBody(),
+              if (_deviceTabOpened)
+                DeviceTab(deviceCodeLoader: widget.deviceCodeLoader)
+              else
+                const SizedBox.shrink(),
+            ],
           ),
         ),
-        centerTitle: true,
-        backgroundColor: lightBg,
-        surfaceTintColor: Colors.transparent,
-        elevation: 0,
-        actions: [
-          IconButton(
-            icon: const Icon(
-              Icons.logout,
-              color: AppColors.danger,
-              size: AppDimens.iconSize,
-            ),
-            tooltip: 'Cerrar sesión',
-            onPressed: _closeSession,
-          ),
-        ],
+        bottomNavigationBar: AppBottomBar(
+          selectedIndex: _tab,
+          onSelect: _selectTab,
+          scanLabel: _isLeave ? 'Registrar retorno' : 'Registrar salida',
+          onScan: ready ? _goToScan : null,
+        ),
       ),
-      // Nunca queda una pantalla en blanco: siempre hay una vista de carga,
-      // de error con reintento, o el contenido ya cargado.
-      body: SafeArea(child: _isLoading ? _buildLoadingView() : _buildBody()),
     );
   }
 
@@ -354,19 +397,13 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Image.asset(
-            'rsc/comteco.png',
-            height: 50,
-            fit: BoxFit.contain,
-            errorBuilder: (_, _, _) =>
-                const Icon(Icons.business_rounded, size: 40, color: darkText),
-          ),
-          const SizedBox(height: 28),
-          const CircularProgressIndicator(color: primaryRed),
+          const AppLogo(size: 120),
+          const SizedBox(height: 16),
+          const CircularProgressIndicator(color: AppColors.primaryRed),
           const SizedBox(height: 16),
           Text(
             'Cargando tu información...',
-            style: AppText.body.copyWith(color: Colors.grey.shade700),
+            style: AppText.body.copyWith(color: AppColors.muted),
           ),
         ],
       ),
@@ -377,7 +414,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     return RefreshIndicator(
       onRefresh: _refreshData,
       color: Colors.white, // Color del spinner
-      backgroundColor: primaryRed,
+      backgroundColor: AppColors.primaryRed,
       child: _hasError ? _buildErrorView() : _buildContent(),
     );
   }
@@ -387,7 +424,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       physics: const AlwaysScrollableScrollPhysics(),
       children: [
         SizedBox(
-          height: MediaQuery.sizeOf(context).height * 0.7,
+          height: MediaQuery.sizeOf(context).height * 0.6,
           child: Center(
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 32),
@@ -403,26 +440,19 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
                   Text(
                     'No se pudo cargar tu información',
                     textAlign: TextAlign.center,
-                    style: AppText.body.copyWith(color: Colors.grey.shade700),
+                    style: AppText.body.copyWith(color: AppColors.info),
                   ),
                   const SizedBox(height: 4),
-                  Text(
+                  const Text(
                     'Revisa tu conexión e inténtalo de nuevo',
                     textAlign: TextAlign.center,
                     style: AppText.caption,
                   ),
                   const SizedBox(height: 20),
-                  SizedBox(
-                    height: AppDimens.buttonHeight,
-                    child: ElevatedButton.icon(
-                      onPressed: _loadUserData,
-                      icon: const Icon(Icons.refresh_rounded),
-                      label: const Text('Reintentar'),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: primaryRed,
-                        foregroundColor: Colors.white,
-                      ),
-                    ),
+                  AppPrimaryButton(
+                    label: 'Reintentar',
+                    icon: Icons.refresh_rounded,
+                    onPressed: _loadUserData,
                   ),
                 ],
               ),
@@ -435,660 +465,276 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
 
   Widget _buildContent() {
     final size = MediaQuery.sizeOf(context);
-    final pad = size.width < 360 ? 16.0 : 20.0;
+    final pad = size.width < 360 ? 16.0 : 22.0;
+    final details = _shownDetails;
+    final range = _range;
+    // Con varios días cada hora lleva su fecha.
+    final multiDay = range != null && !_isSingleDay(range);
+    final today = _dateOnly(_now());
+    final summary = _summary;
 
     return SingleChildScrollView(
       physics: const AlwaysScrollableScrollPhysics(),
+      padding: EdgeInsets.fromLTRB(
+        pad,
+        20,
+        pad,
+        // Deja libre la barra inferior y el botón central que sobresale.
+        AppBottomBar.totalHeight(context) + 8,
+      ),
       child: Center(
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 520),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              _buildIdentity(pad),
-              Padding(
-                padding: EdgeInsets.fromLTRB(pad, 18, pad, 24),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    _buildStatusPanel(),
-                    const SizedBox(height: 14),
-                    _buildScanButton(),
-                    const SizedBox(height: 28),
-                    _buildStats(),
-                    if (_details != null && _details!.isNotEmpty) ...[
-                      const SizedBox(height: 24),
-                      _buildDetails(_details!),
-                    ],
-                    if (_visibleUnreturned.isNotEmpty) ...[
-                      const SizedBox(height: 24),
-                      _buildUnreturnedWarnings(),
-                    ],
-                    const SizedBox(height: 24),
-                    DeviceCodeNote(
-                      loader: widget.deviceCodeLoader,
-                      help:
-                          'Recursos Humanos puede pedirte este código para '
-                          'ayudarte con el acceso a tu cuenta.',
-                    ),
-                  ],
-                ),
+              _buildHeader(),
+              const SizedBox(height: 14),
+              StatusCard(
+                isLeave: _isLeave,
+                leftAt: _leftAt,
+                premise: _currentPremise,
+                reason: _reason,
+                lastReturnAt: _lastReturnToday,
+                clock: widget.clock,
               ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  /// Quién es: foto, nombre y rol real (lo envía el servidor).
-  Widget _buildIdentity(double pad) {
-    return Container(
-      color: Colors.white,
-      padding: EdgeInsets.fromLTRB(pad, 16, pad, 16),
-      child: Row(
-        children: [
-          _Avatar(photoUrl: _photoUrl),
-          const SizedBox(width: 14),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  _name ?? 'Usuario',
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    fontSize: 21,
-                    fontWeight: FontWeight.w800,
-                    color: darkText,
-                    height: 1.15,
-                  ),
-                ),
-                if (_role != null && _role!.isNotEmpty) ...[
-                  const SizedBox(height: 4),
-                  Row(
-                    children: [
-                      const Icon(
-                        Icons.badge_outlined,
-                        size: 18,
-                        color: AppColors.info,
-                      ),
-                      const SizedBox(width: 6),
-                      Flexible(
-                        child: Text(
-                          _role!,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
-                            fontSize: 15,
-                            fontWeight: FontWeight.w700,
-                            color: AppColors.info,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
-                if (_jobTitle != null && _jobTitle!.isNotEmpty) ...[
-                  const SizedBox(height: 2),
-                  Text(
-                    _jobTitle!,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(fontSize: 14, color: Colors.black54),
-                  ),
-                ],
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  /// Estado en un vistazo: verde = dentro, gris = fuera.
-  Widget _buildStatusPanel() {
-    // Dentro = verde apagado; fuera = gris neutro (sin un tercer color).
-    final color = _isLeave ? AppColors.darkText : AppColors.success;
-    final bg = _isLeave ? AppColors.infoBg : AppColors.successBg;
-    final days = _duration.inDays;
-    final hms =
-        '${_twoDigits(_duration.inHours.remainder(24))}:${_twoDigits(_duration.inMinutes.remainder(60))}:${_twoDigits(_duration.inSeconds.remainder(60))}';
-
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: bg,
-        border: Border(left: BorderSide(color: color, width: 8)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Icon(
-                _isLeave
-                    ? Icons.directions_walk_rounded
-                    : Icons.check_circle_rounded,
-                color: color,
-                size: 32,
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Text(
-                  _isLeave ? 'Estás fuera' : 'Estás dentro',
-                  style: TextStyle(
-                    fontSize: 24,
-                    fontWeight: FontWeight.w800,
-                    color: color,
-                  ),
-                ),
-              ),
-            ],
-          ),
-          if (_isLeave) ...[
-            const SizedBox(height: 10),
-            Text(
-              _formatLeaveText(_dateLeave),
-              style: const TextStyle(fontSize: 15, color: darkText),
-            ),
-            const SizedBox(height: 10),
-            FittedBox(
-              fit: BoxFit.scaleDown,
-              alignment: Alignment.centerLeft,
-              child: Text(
-                days > 0 ? '$days días $hms' : hms,
-                style: const TextStyle(
-                  fontSize: 40,
-                  fontWeight: FontWeight.w800,
-                  color: darkText,
-                  letterSpacing: 1.5,
-                ),
-              ),
-            ),
-            const Text(
-              'Tiempo transcurrido',
-              style: TextStyle(fontSize: 15, color: Colors.black54),
-            ),
-            if (_reason != null && _reason!.isNotEmpty) ...[
+              const SizedBox(height: 14),
+              _buildDateRow(),
               const SizedBox(height: 10),
-              Text(
-                'Motivo: $_reason',
-                style: const TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w700,
-                  color: darkText,
+              WeekStrip(
+                selectedStart: range?.start ?? today,
+                selectedEnd: range?.end ?? today,
+                today: today,
+                onSelect: _selectDay,
+              ),
+              const SizedBox(height: 16),
+              const Text(
+                'Detalle de tus salidas',
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.w800,
+                  color: AppColors.darkText,
                 ),
               ),
-            ],
-          ] else
-            const Padding(
-              padding: EdgeInsets.only(top: 6),
-              child: Text(
-                'Cuando salgas, escanea el código QR del predio.',
-                style: TextStyle(fontSize: 15, color: darkText),
-              ),
-            ),
-        ],
-      ),
-    );
-  }
-
-  /// Qué hizo la persona en la fecha o rango elegido: de qué predio salió, por
-  /// qué motivo, de qué hora a qué hora y cuánto tiempo estuvo fuera.
-  Widget _buildDetails(List<LeaveDetail> details) {
-    // Con varios días (o una salida que cruza medianoche) cada hora lleva su fecha.
-    final multiDay = _range != null && !_isSingleDay(_range!);
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        const Text(
-          'Detalle de tus salidas',
-          style: TextStyle(
-            fontSize: 19,
-            fontWeight: FontWeight.w800,
-            color: darkText,
-          ),
-        ),
-        const SizedBox(height: 10),
-        for (final leave in details)
-          _LeaveDetailCard(leave: leave, showDates: multiDay),
-      ],
-    );
-  }
-
-  /// Una advertencia por cada salida del rango elegido que no marcó retorno.
-  Widget _buildUnreturnedWarnings() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        for (final leave in _visibleUnreturned)
-          Container(
-            margin: const EdgeInsets.only(bottom: 10),
-            padding: const EdgeInsets.all(14),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              border: Border(
-                left: const BorderSide(color: AppColors.danger, width: 5),
-                top: BorderSide(color: AppColors.line),
-                right: BorderSide(color: AppColors.line),
-                bottom: BorderSide(color: AppColors.line),
-              ),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Row(
-                  children: [
-                    Icon(
-                      Icons.warning_amber_rounded,
-                      color: AppColors.danger,
-                      size: 26,
-                    ),
-                    SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        'Salida sin retorno',
-                        style: TextStyle(
-                          fontSize: 17,
-                          fontWeight: FontWeight.w800,
-                          color: AppColors.danger,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 6),
+              if (summary != null) ...[
+                const SizedBox(height: 2),
                 Text(
-                  'Saliste el ${_twoDigits(leave.leftAt.day)}/${_twoDigits(leave.leftAt.month)}/${leave.leftAt.year} a las ${_twoDigits(leave.leftAt.hour)}:${_twoDigits(leave.leftAt.minute)}',
-                  style: const TextStyle(
-                    fontSize: 15,
-                    color: AppColors.darkText,
-                  ),
-                ),
-                if (leave.reason != null && leave.reason!.isNotEmpty)
-                  Text(
-                    'Motivo: ${leave.reason}',
-                    style: const TextStyle(
-                      fontSize: 15,
-                      fontWeight: FontWeight.w700,
-                      color: AppColors.darkText,
-                    ),
-                  ),
-                const SizedBox(height: 4),
-                const Text(
-                  'No se incluye en tus contadores.',
-                  style: TextStyle(fontSize: 13, color: Colors.black54),
+                  summary,
+                  style: const TextStyle(fontSize: 13, color: AppColors.muted),
                 ),
               ],
-            ),
+              const SizedBox(height: 12),
+              if (details != null)
+                for (final leave in details)
+                  TripCard(
+                    leave: leave,
+                    showDates: multiDay,
+                    canStillReturn: DateText.sameDay(leave.leftAt, _now()),
+                  )
+              else if (_visibleUnreturned.isNotEmpty)
+                // Si no se pudo cargar el detalle, al menos se avisa de las
+                // salidas sin retorno del rango.
+                for (final leave in _visibleUnreturned)
+                  _UnreturnedWarning(leave: leave),
+            ],
           ),
-      ],
-    );
-  }
-
-  Widget _buildScanButton() {
-    final title = _isLeave ? 'Registrar mi retorno' : 'Registrar mi salida';
-    return SizedBox(
-      height: 68,
-      child: FilledButton.icon(
-        onPressed: _goToScan,
-        icon: const Icon(Icons.qr_code_scanner_rounded, size: 32),
-        label: Text(
-          title,
-          style: const TextStyle(fontSize: 19, fontWeight: FontWeight.w800),
-        ),
-        style: FilledButton.styleFrom(
-          backgroundColor: primaryRed,
-          foregroundColor: Colors.white,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
         ),
       ),
     );
   }
 
-  /// Cuántas veces y cuánto tiempo salió en la fecha elegida (por defecto hoy).
-  Widget _buildStats() {
-    final range = _range;
-    final stat = range != null ? _rangeStat : _stats['day'];
-    final loading = range != null && _rangeLoading;
-    final exits = loading ? null : stat?.exits;
-    final minutes = loading ? null : stat?.minutes;
+  /// Quién es: logo, rol y nombre, y cerrar sesión.
+  Widget _buildHeader() {
+    final role = (_role ?? '').trim();
+    final job = (_jobTitle ?? '').trim();
+    final roleLine = [
+      if (role.isNotEmpty) role,
+      if (job.isNotEmpty) job,
+    ].join(' · ');
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
+    return Row(
       children: [
-        const Text(
-          'Tus salidas',
-          style: TextStyle(
-            fontSize: 19,
-            fontWeight: FontWeight.w800,
-            color: darkText,
-          ),
-        ),
-        const SizedBox(height: 10),
-        _buildDateBar(),
-        const SizedBox(height: 12),
-        Container(
-          decoration: const BoxDecoration(
-            color: Colors.white,
-            border: Border.symmetric(
-              horizontal: BorderSide(color: AppColors.line),
-            ),
-          ),
-          padding: const EdgeInsets.symmetric(vertical: 16),
-          child: Row(
+        const AppLogo(size: 46),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              _StatNumber(
-                value: exits == null ? '—' : '$exits',
-                label: 'Salidas',
-                icon: Icons.logout_rounded,
-              ),
-              Container(width: 1, height: 52, color: AppColors.line),
-              _StatNumber(
-                value: minutes == null ? '—' : _formatMinutes(minutes),
-                label: 'Tiempo fuera',
-                icon: Icons.timer_outlined,
-              ),
-            ],
-          ),
-        ),
-        if (exits == 0)
-          const Padding(
-            padding: EdgeInsets.only(top: 10),
-            child: Text(
-              'No saliste en esta fecha.',
-              textAlign: TextAlign.center,
-              style: TextStyle(fontSize: 14, color: Colors.black54),
-            ),
-          ),
-      ],
-    );
-  }
-
-  /// Selector de fecha: flechas para ir día a día y toque central para
-  /// abrir el calendario (un día o un rango).
-  Widget _buildDateBar() {
-    final range = _range;
-    final canGoNext = range != null && _isSingleDay(range);
-    final canGoPrev = range == null || _isSingleDay(range);
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Container(
-          decoration: BoxDecoration(
-            color: Colors.white,
-            border: Border.all(color: AppColors.line),
-            borderRadius: BorderRadius.circular(6),
-          ),
-          child: Row(
-            children: [
-              IconButton(
-                tooltip: 'Día anterior',
-                onPressed: canGoPrev ? () => _shiftDay(-1) : null,
-                icon: const Icon(Icons.chevron_left_rounded, size: 30),
-              ),
-              Expanded(
-                child: Tooltip(
-                  message: 'Elegir fecha',
-                  child: InkWell(
-                    onTap: _pickRange,
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 10),
-                      child: Column(
-                        children: [
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              const Icon(
-                                Icons.calendar_month_rounded,
-                                size: 20,
-                                color: AppColors.info,
-                              ),
-                              const SizedBox(width: 8),
-                              Flexible(
-                                child: Text(
-                                  _rangeTitle(),
-                                  overflow: TextOverflow.ellipsis,
-                                  style: const TextStyle(
-                                    fontSize: 17,
-                                    fontWeight: FontWeight.w800,
-                                    color: darkText,
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                          const Text(
-                            'Toca para elegir otra fecha',
-                            style: TextStyle(
-                              fontSize: 12,
-                              color: Colors.black54,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-              IconButton(
-                tooltip: 'Día siguiente',
-                onPressed: canGoNext ? () => _shiftDay(1) : null,
-                icon: const Icon(Icons.chevron_right_rounded, size: 30),
-              ),
-            ],
-          ),
-        ),
-        if (range != null)
-          Align(
-            alignment: Alignment.centerRight,
-            child: TextButton.icon(
-              onPressed: _clearRange,
-              icon: const Icon(Icons.today_rounded, size: 18),
-              label: const Text('Volver a hoy'),
-              style: TextButton.styleFrom(foregroundColor: AppColors.info),
-            ),
-          ),
-      ],
-    );
-  }
-}
-
-/// Una salida: predio, motivo, de qué hora a qué hora y duración.
-class _LeaveDetailCard extends StatelessWidget {
-  final LeaveDetail leave;
-
-  /// Antepone la fecha a las horas (vista de varios días).
-  final bool showDates;
-
-  const _LeaveDetailCard({required this.leave, required this.showDates});
-
-  static String _two(int n) => n.toString().padLeft(2, '0');
-
-  static String _day(DateTime d) => '${_two(d.day)}/${_two(d.month)}';
-
-  static String _hm(DateTime d) => '${_two(d.hour)}:${_two(d.minute)}';
-
-  static String _duration(int minutes) {
-    if (minutes < 60) return '$minutes min';
-    final h = minutes ~/ 60;
-    final m = minutes % 60;
-    return m == 0 ? '$h h' : '$h h $m min';
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final left = leave.leftAt;
-    final returned = leave.returnedAt;
-    // Si vuelve otro día, la hora de retorno lleva su fecha para no confundir.
-    final returnedOtherDay = returned != null && _day(returned) != _day(left);
-    String stamp(DateTime d, bool withDay) =>
-        withDay ? '${_day(d)} ${_hm(d)}' : _hm(d);
-
-    final schedule = returned == null
-        ? 'Desde las ${stamp(left, showDates)} · sigue fuera'
-        : 'De ${stamp(left, showDates || returnedOtherDay)} '
-              'a ${stamp(returned, showDates || returnedOtherDay)}';
-    final minutes = leave.minutes;
-    final premise = (leave.premise ?? '').isEmpty
-        ? 'Predio no disponible'
-        : leave.premise!;
-
-    return Container(
-      margin: const EdgeInsets.only(bottom: 10),
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        border: Border(
-          left: BorderSide(
-            color: leave.isOpen ? AppColors.danger : AppColors.info,
-            width: 5,
-          ),
-          top: const BorderSide(color: AppColors.line),
-          right: const BorderSide(color: AppColors.line),
-          bottom: const BorderSide(color: AppColors.line),
-        ),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              const Icon(Icons.place_outlined, size: 22, color: AppColors.info),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Text(
-                  'Salida de $premise',
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w800,
-                    color: AppColors.darkText,
-                  ),
-                ),
-              ),
-              if (minutes != null)
+              if (roleLine.isNotEmpty)
                 Text(
-                  _duration(minutes),
-                  style: const TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w800,
-                    color: AppColors.darkText,
-                  ),
+                  roleLine,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(fontSize: 13, color: AppColors.muted),
                 ),
+              Text(
+                'Hola, ${_name ?? 'Usuario'}',
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.w800,
+                  height: 1.1,
+                  color: AppColors.darkText,
+                ),
+              ),
             ],
           ),
-          if ((leave.reason ?? '').isNotEmpty) ...[
-            const SizedBox(height: 6),
-            Text(
-              'Motivo: ${leave.reason}',
-              style: const TextStyle(
-                fontSize: 15,
-                fontWeight: FontWeight.w700,
-                color: AppColors.darkText,
-              ),
+        ),
+        const SizedBox(width: 8),
+        _SquareButton(
+          tooltip: 'Cerrar sesión',
+          icon: Icons.logout_rounded,
+          color: AppColors.danger,
+          onTap: _closeSession,
+        ),
+      ],
+    );
+  }
+
+  /// «Jueves 19 de noviembre», «Volver a hoy» y el calendario.
+  Widget _buildDateRow() {
+    return Row(
+      children: [
+        Expanded(
+          child: Text(
+            _dateTitle,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(
+              fontSize: 16,
+              fontWeight: FontWeight.w800,
+              color: AppColors.darkText,
             ),
-          ],
-          const SizedBox(height: 4),
-          Row(
-            children: [
-              const Icon(
-                Icons.schedule_rounded,
-                size: 18,
-                color: Colors.black54,
-              ),
-              const SizedBox(width: 6),
-              Expanded(
-                child: Text(
-                  schedule,
-                  style: TextStyle(
-                    fontSize: 14,
-                    color: leave.isOpen ? AppColors.danger : Colors.black54,
-                  ),
-                ),
-              ),
-            ],
           ),
-        ],
-      ),
+        ),
+        if (_range != null)
+          TextButton(
+            onPressed: _clearRange,
+            style: TextButton.styleFrom(
+              foregroundColor: AppColors.primaryRed,
+              minimumSize: const Size(0, 44),
+              padding: const EdgeInsets.symmetric(horizontal: 10),
+            ),
+            child: const Text('Volver a hoy'),
+          ),
+        const SizedBox(width: 4),
+        _SquareButton(
+          tooltip: 'Elegir fecha',
+          icon: Icons.calendar_month_rounded,
+          color: AppColors.primaryRed,
+          onTap: _pickRange,
+        ),
+      ],
     );
   }
 }
 
-class _StatNumber extends StatelessWidget {
-  final String value;
-  final String label;
+/// Botón cuadrado con borde, para acciones secundarias (cerrar sesión, calendario).
+class _SquareButton extends StatelessWidget {
+  final String tooltip;
   final IconData icon;
+  final Color color;
+  final VoidCallback onTap;
 
-  const _StatNumber({
-    required this.value,
-    required this.label,
+  const _SquareButton({
+    required this.tooltip,
     required this.icon,
+    required this.color,
+    required this.onTap,
   });
 
   @override
   Widget build(BuildContext context) {
-    return Expanded(
-      child: Column(
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(icon, size: 22, color: Colors.black54),
-              const SizedBox(width: 6),
-              Flexible(
-                child: FittedBox(
-                  fit: BoxFit.scaleDown,
-                  child: Text(
-                    value,
-                    style: const TextStyle(
-                      fontSize: 32,
-                      fontWeight: FontWeight.w800,
-                      color: AppColors.darkText,
-                    ),
-                  ),
-                ),
-              ),
-            ],
+    return Tooltip(
+      message: tooltip,
+      child: Semantics(
+        button: true,
+        label: tooltip,
+        excludeSemantics: true,
+        child: Material(
+          color: Colors.white,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+            side: const BorderSide(color: Color(0xFFE0E0E0)),
           ),
-          const SizedBox(height: 2),
-          Text(
-            label,
-            style: const TextStyle(fontSize: 14, color: Colors.black54),
+          child: InkWell(
+            customBorder: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
+            onTap: onTap,
+            child: SizedBox(
+              width: 44,
+              height: 44,
+              child: Icon(icon, size: 20, color: color),
+            ),
           ),
-        ],
+        ),
       ),
     );
   }
 }
 
-/// Foto de perfil; si no hay o no carga, una imagen predeterminada.
-class _Avatar extends StatelessWidget {
-  final String? photoUrl;
+/// Aviso de una salida sin retorno, cuando no se pudo cargar el detalle del rango.
+class _UnreturnedWarning extends StatelessWidget {
+  final UnreturnedLeave leave;
 
-  const _Avatar({required this.photoUrl});
+  const _UnreturnedWarning({required this.leave});
 
   @override
   Widget build(BuildContext context) {
-    const fallback = CircleAvatar(
-      radius: 30,
-      backgroundColor: AppColors.infoBg,
-      child: Icon(Icons.person_rounded, size: 38, color: AppColors.info),
-    );
-    final url = photoUrl;
-    if (url == null || url.isEmpty) return fallback;
-    return ClipOval(
-      child: Image.network(
-        url,
-        width: 60,
-        height: 60,
-        fit: BoxFit.cover,
-        errorBuilder: (_, _, _) => fallback,
-        loadingBuilder: (_, child, progress) =>
-            progress == null ? child : fallback,
+    final left = leave.leftAt;
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: const Color(0xFFFFF9F9),
+        borderRadius: BorderRadius.circular(AppDimens.radiusCard),
+        border: Border.all(color: const Color(0xFFE9B8B8)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Row(
+            children: [
+              Icon(
+                Icons.warning_amber_rounded,
+                color: AppColors.danger,
+                size: 24,
+              ),
+              SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  'Salida sin retorno',
+                  style: TextStyle(
+                    fontSize: 17,
+                    fontWeight: FontWeight.w800,
+                    color: AppColors.danger,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          Text(
+            'Saliste el ${DateText.dayMonthYear(left)} a las ${DateText.hm(left)}',
+            style: const TextStyle(fontSize: 14, color: AppColors.darkText),
+          ),
+          if ((leave.reason ?? '').isNotEmpty)
+            Text(
+              'Motivo: ${leave.reason}',
+              style: const TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w700,
+                color: AppColors.darkText,
+              ),
+            ),
+          const SizedBox(height: 4),
+          const Text(
+            'No se incluye en tus contadores.',
+            style: TextStyle(fontSize: 13, color: AppColors.muted),
+          ),
+        ],
       ),
     );
   }
