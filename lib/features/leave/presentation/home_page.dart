@@ -12,6 +12,7 @@ import '../../../core/widgets/app_logo.dart';
 import '../../../core/widgets/app_popup.dart';
 import '../../../core/widgets/app_primary_button.dart';
 import '../../auth/data/auth_service.dart';
+import '../../auth/models/account_info.dart';
 import '../../auth/presentation/login_page.dart';
 import '../../device/presentation/device_tab.dart';
 import '../data/leave_service.dart';
@@ -32,6 +33,10 @@ class HomePage extends StatefulWidget {
   /// Permite inyectar la consulta del código de dispositivo (pruebas).
   final Future<DeviceCodeInfo?> Function()? deviceCodeLoader;
 
+  /// Permite inyectar la consulta de la cuenta mostrada en «Dispositivo»
+  /// (pruebas).
+  final Future<AccountInfo?> Function()? accountLoader;
+
   /// Reloj de la pantalla (pruebas): decide qué día es «hoy» sin depender de
   /// la fecha real del equipo.
   final DateTime Function()? clock;
@@ -41,6 +46,7 @@ class HomePage extends StatefulWidget {
     this.leaveService,
     this.authService,
     this.deviceCodeLoader,
+    this.accountLoader,
     this.clock,
   });
 
@@ -376,7 +382,11 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
             children: [
               _isLoading ? _buildLoadingView() : _buildBody(),
               if (_deviceTabOpened)
-                DeviceTab(deviceCodeLoader: widget.deviceCodeLoader)
+                DeviceTab(
+                  codeLoader: widget.deviceCodeLoader,
+                  accountLoader:
+                      widget.accountLoader ?? _authService.currentAccount,
+                )
               else
                 const SizedBox.shrink(),
             ],

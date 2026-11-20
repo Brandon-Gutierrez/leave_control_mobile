@@ -1,12 +1,12 @@
 import 'package:flutter/material.dart';
 
-import '../../../core/device/device_code_note.dart';
 import '../../../core/device/device_code_service.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_text_styles.dart';
 import '../../../core/widgets/app_logo.dart';
 import '../../../core/widgets/app_popup.dart';
 import '../../../core/widgets/app_primary_button.dart';
+import '../../device/presentation/device_code_sheet.dart';
 import '../../leave/presentation/home_page.dart';
 import '../data/auth_service.dart';
 
@@ -177,10 +177,49 @@ class _LoginPageState extends State<LoginPage> {
                         loading: _isLoading,
                         onPressed: _login,
                       ),
-                      // Solo aparece si este teléfono ya está vinculado a una
-                      // cuenta: quien no pueda ingresar lo dicta a RR. HH.
-                      const SizedBox(height: 24),
-                      DeviceCodeNote(loader: widget.deviceCodeLoader),
+                      // Quien no pueda ingresar (p. ej. su teléfono quedó
+                      // vinculado a otra cuenta) dicta el código a RR. HH.
+                      const SizedBox(height: 8),
+                      TextButton(
+                        onPressed: () => showDeviceCodeSheet(
+                          context,
+                          codeLoader: widget.deviceCodeLoader,
+                        ),
+                        style: TextButton.styleFrom(
+                          foregroundColor: AppColors.info,
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 10,
+                          ),
+                          textStyle: const TextStyle(
+                            fontFamily: appFontFamily,
+                            fontSize: 14,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                        // El ícono va dentro del texto: si la frase se parte en
+                        // dos líneas, todo queda centrado junto.
+                        child: const Text.rich(
+                          TextSpan(
+                            children: [
+                              WidgetSpan(
+                                alignment: PlaceholderAlignment.middle,
+                                child: Padding(
+                                  padding: EdgeInsets.only(right: 8),
+                                  child: Icon(
+                                    Icons.smartphone_rounded,
+                                    size: 18,
+                                  ),
+                                ),
+                              ),
+                              TextSpan(
+                                text: '¿No puedes ingresar? Ver código del teléfono ›',
+                              ),
+                            ],
+                          ),
+                          textAlign: TextAlign.center,
+                        ),
+                      ),
                     ],
                   ),
                 ),

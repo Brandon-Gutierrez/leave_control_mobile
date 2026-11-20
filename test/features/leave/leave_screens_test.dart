@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:control_input_output/core/device/device_code_service.dart';
 import 'package:control_input_output/core/network/api_exceptions.dart';
+import 'package:control_input_output/features/auth/models/account_info.dart';
 import 'package:control_input_output/features/auth/presentation/login_page.dart';
 import 'package:control_input_output/features/leave/data/leave_service.dart';
 import 'package:control_input_output/features/leave/models/leave_reason.dart';
@@ -345,6 +346,7 @@ void main() {
     WidgetTester tester,
     LeaveService api, {
     Future<DeviceCodeInfo?> Function()? deviceCodeLoader,
+    Future<AccountInfo?> Function()? accountLoader,
   }) async {
     await tester.pumpWidget(
       MaterialApp(
@@ -354,6 +356,7 @@ void main() {
         home: HomePage(
           leaveService: api,
           deviceCodeLoader: deviceCodeLoader ?? _noDeviceCode,
+          accountLoader: accountLoader ?? (() async => null),
           clock: fixedNow,
         ),
       ),
@@ -727,8 +730,13 @@ void main() {
     await pumpHome(
       tester,
       api,
-      deviceCodeLoader: () async =>
-          const DeviceCodeInfo(code: 'K7M4-Q9XB', linked: true),
+      deviceCodeLoader: () async => DeviceCodeInfo(
+        code: 'K7M4-Q9XB',
+        linked: true,
+        linkedAt: DateTime(2026, 11, 18, 8, 15),
+      ),
+      accountLoader: () async =>
+          const AccountInfo(name: 'Juan Pérez', item: '2057'),
     );
 
     // El código del teléfono ya no aparece en Inicio.
@@ -740,6 +748,9 @@ void main() {
     await tester.pump();
     expect(find.text('Mi dispositivo'), findsOneWidget);
     expect(find.text('K7M4-Q9XB'), findsOneWidget);
+    expect(find.text('Vinculado a tu cuenta'), findsOneWidget);
+    expect(find.text('Juan Pérez · Item 2057'), findsOneWidget);
+    expect(find.text('Vinculado el 18/11/2026 a las 08:15'), findsOneWidget);
     expect(find.text('Hola, Juan Pérez'), findsNothing);
 
     await tester.tap(find.text('Inicio'));
@@ -748,6 +759,31 @@ void main() {
     expect(find.text('Mi dispositivo'), findsNothing);
 
     await _tearDownTimers(tester);
+  });
+
+  testWidgets('El login ofrece ver el código del teléfono en una hoja', (
+    tester,
+  ) async {
+    phone(tester);
+    await tester.pumpWidget(
+      MaterialApp(
+        home: LoginPage(
+          deviceCodeLoader: () async =>
+              const DeviceCodeInfo(code: 'K7M4-Q9XB', linked: true),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    // El código no está a la vista hasta que se pide.
+    expect(find.text('K7M4-Q9XB'), findsNothing);
+    await tester.tap(find.textContaining('¿No puedes ingresar?'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Código de este teléfono'), findsOneWidget);
+    expect(find.text('K7M4-Q9XB'), findsOneWidget);
+    expect(find.text('Vinculado a una cuenta'), findsOneWidget);
+    expect(find.text('Copiar código'), findsOneWidget);
   });
 
   testWidgets('El botón de escanear no responde mientras carga', (

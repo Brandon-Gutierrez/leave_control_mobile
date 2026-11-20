@@ -4,6 +4,7 @@ import '../../../core/config/api_routes.dart';
 import '../../../core/network/api_client.dart';
 import '../../../core/network/api_responses.dart';
 import '../../../core/storage/storage_service.dart';
+import '../models/account_info.dart';
 
 /// Inicio y cierre de sesión, y comprobación de la sesión guardada.
 class AuthService {
@@ -71,6 +72,23 @@ class AuthService {
       response,
       'No se pudo comprobar tu sesión. Intenta de nuevo.',
     );
+  }
+
+  //Nombre e ítem de la cuenta con la sesión abierta (nada se guarda en el
+  //teléfono). Null si no se pudo consultar: es un dato informativo y nunca debe
+  //bloquear la pantalla donde se muestra.
+  Future<AccountInfo?> currentAccount() async {
+    try {
+      final response = await _dio.get(
+        ApiRoutes.me,
+        options: ApiResponses.acceptAnyStatus,
+      );
+      final data = response.data;
+      if (response.statusCode != 200 || data is! Map) return null;
+      return AccountInfo.fromUserJson(data['user']);
+    } catch (_) {
+      return null;
+    }
   }
 
   //Borra lo que versiones anteriores guardaron de la persona; nunca debe fallar.

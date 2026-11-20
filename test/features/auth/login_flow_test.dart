@@ -129,6 +129,37 @@ void main() {
     });
   });
 
+  group('cuenta actual', () {
+    test('lee el nombre y el ítem de la sesión', () async {
+      respond(200, '{"user":{"name":"Juan Pérez","item":2057}}');
+
+      final account = await api.currentAccount();
+
+      expect(account!.name, 'Juan Pérez');
+      expect(account.item, '2057');
+    });
+
+    test('sin ítem muestra solo el nombre', () async {
+      respond(200, '{"user":{"name":"Juan Pérez","item":null}}');
+
+      final account = await api.currentAccount();
+
+      expect(account!.name, 'Juan Pérez');
+      expect(account.item, isNull);
+    });
+
+    test('sin sesión o con una respuesta rara devuelve null', () async {
+      respond(401, '{"message":"Unauthenticated."}');
+      expect(await api.currentAccount(), isNull);
+
+      respond(200, '{"user":{"name":"  "}}');
+      expect(await api.currentAccount(), isNull);
+
+      respond(503, 'Service Unavailable', contentType: 'text/plain');
+      expect(await api.currentAccount(), isNull);
+    });
+  });
+
   group('sesión guardada', () {
     test('200 en /auth/me es sesión válida', () async {
       respond(200, '{"user":{"name":"Juan"}}');

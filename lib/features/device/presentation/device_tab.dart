@@ -1,19 +1,18 @@
 import 'package:flutter/material.dart';
 
-import '../../../core/device/device_code_note.dart';
-import '../../../core/device/device_code_service.dart';
-import '../../../core/theme/app_text_styles.dart';
+import '../../../core/theme/app_colors.dart';
 import '../../../core/widgets/app_bottom_bar.dart';
 import '../../../core/widgets/app_logo.dart';
+import 'device_view.dart';
 
-/// Pestaña «Dispositivo». Por ahora solo muestra el código del teléfono; la
-/// pantalla completa (copiar, para qué sirve, cuenta vinculada) llega en la
-/// siguiente fase.
+/// Pestaña «Dispositivo»: el código de este teléfono, para qué sirve y a qué
+/// cuenta está vinculado.
 class DeviceTab extends StatelessWidget {
-  /// Permite inyectar la consulta del código de dispositivo (pruebas).
-  final Future<DeviceCodeInfo?> Function()? deviceCodeLoader;
+  /// Consultas del código y de la cuenta. Permiten inyectar datos de prueba.
+  final DeviceCodeLoader? codeLoader;
+  final AccountLoader accountLoader;
 
-  const DeviceTab({super.key, this.deviceCodeLoader});
+  const DeviceTab({super.key, this.codeLoader, required this.accountLoader});
 
   @override
   Widget build(BuildContext context) {
@@ -38,20 +37,20 @@ class DeviceTab extends StatelessWidget {
                   Expanded(
                     child: Text(
                       'Mi dispositivo',
-                      style: AppText.display,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: 26,
+                        fontWeight: FontWeight.w800,
+                        letterSpacing: -0.4,
+                        color: AppColors.darkText,
+                      ),
                     ),
                   ),
                 ],
               ),
               const SizedBox(height: 16),
-              DeviceCodeNote(
-                loader: deviceCodeLoader,
-                help:
-                    'Recursos Humanos puede pedirte este código para '
-                    'ayudarte con el acceso a tu cuenta.',
-              ),
+              DeviceView(codeLoader: codeLoader, accountLoader: accountLoader),
             ],
           ),
         ),

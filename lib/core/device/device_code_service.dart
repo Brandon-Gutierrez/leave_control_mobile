@@ -4,14 +4,22 @@ import '../config/api_routes.dart';
 import '../network/api_client.dart';
 import '../network/api_responses.dart';
 
-/// Código corto de este teléfono (p. ej. «K7M4-Q9XB») y si ya está vinculado a
-/// una cuenta. Recursos Humanos lo busca en el panel para ver a quién está
-/// vinculado el teléfono y desvincularlo.
+/// Código corto de este teléfono (p. ej. «K7M4-Q9XB»), si ya está vinculado a
+/// una cuenta y desde cuándo. Recursos Humanos lo busca en el panel para ver a
+/// quién está vinculado el teléfono y desvincularlo.
 class DeviceCodeInfo {
   final String code;
   final bool linked;
 
-  const DeviceCodeInfo({required this.code, required this.linked});
+  /// Cuándo se vinculó (hora local); null si no está vinculado o el servidor
+  /// no lo informó.
+  final DateTime? linkedAt;
+
+  const DeviceCodeInfo({
+    required this.code,
+    required this.linked,
+    this.linkedAt,
+  });
 }
 
 /// Consulta el código del dispositivo al servidor. No requiere sesión.
@@ -32,7 +40,11 @@ class DeviceCodeService {
       if (response.statusCode != 200 || data is! Map) return null;
       final code = data['code']?.toString() ?? '';
       if (code.isEmpty) return null;
-      return DeviceCodeInfo(code: code, linked: data['linked'] == true);
+      return DeviceCodeInfo(
+        code: code,
+        linked: data['linked'] == true,
+        linkedAt: DateTime.tryParse('${data['linked_at']}')?.toLocal(),
+      );
     } catch (_) {
       return null;
     }
