@@ -37,6 +37,18 @@ class LocationProof {
   };
 }
 
+/// Cómo está la ubicación del teléfono, para avisarlo en el escáner.
+enum LocationReadiness {
+  /// El GPS está encendido pero aún no hay una lectura reciente y precisa.
+  searching,
+
+  /// Hay una lectura reciente y lo bastante precisa para validar la salida.
+  ready,
+
+  /// El GPS está apagado o la app no tiene permiso de ubicación.
+  off,
+}
+
 /// Se lanza cuando no se puede obtener una ubicación confiable.
 class LocationException implements Exception {
   final String message;
@@ -128,13 +140,25 @@ class LocationService {
   /// suele entregar primero la última posición conocida, que puede estar lejos.
   final Duration maxReadingAge;
 
+  /// Si la app puede usar la ubicación ahora (GPS encendido y con permiso).
+  final Future<bool> Function() _canUseLocation;
+
   LocationService({
     PositionFeed? feed,
     DateTime Function()? now,
+    Future<bool> Function()? canUseLocation,
     this.maxWait = const Duration(seconds: 15),
     this.maxReadingAge = const Duration(seconds: 15),
   }) : _feed = feed ?? PositionFeed.shared,
-       _now = now ?? DateTime.now;
+       _now = now ?? DateTime.now,
+       _canUseLocation = canUseLocation ?? _systemCanUseLocation;
+
+  static Future<bool> _systemCanUseLocation() async {
+    if (!await Geolocator.isLocationServiceEnabled()) return false;
+    final permission = await Geolocator.checkPermission();
+    return permission != LocationPermission.denied &&
+        permission != LocationPermission.deniedForever;
+  }
 
   /// Clave de NSLocationTemporaryUsageDescriptionDictionary (ios/Runner/Info.plist).
   static const _fullAccuracyPurposeKey = 'PremiseValidation';
@@ -194,18 +218,70 @@ class LocationService {
   /// Enciende el GPS en segundo plano (p. ej. al abrir el escáner) para que la
   /// lectura precisa ya esté lista cuando se escanee. No pide permisos ni
   /// muestra nada: si el GPS está apagado o no hay permiso, no hace nada.
-  Future<void> warmUp() async {
+  /// Devuelve si el GPS quedó encendido.
+  Future<bool> warmUp() async {
     try {
-      if (!await Geolocator.isLocationServiceEnabled()) return;
-      final permission = await Geolocator.checkPermission();
-      if (permission == LocationPermission.denied ||
-          permission == LocationPermission.deniedForever) {
-        return;
-      }
+      if (!await _canUseLocation()) return false;
       _feed.keepAlive();
+      return true;
     } catch (_) {
       // Es solo una optimización: capture() vuelve a validarlo todo.
+      return false;
     }
+  }
+
+  /// Estado de la ubicación mientras alguien escucha: enciende el GPS y lo
+  /// mantiene encendido, y avisa cuando ya hay una lectura utilizable, cuando
+  /// aún la busca y cuando el teléfono no tiene la ubicación disponible. Solo
+  /// emite cuando el estado cambia. Al dejar de escuchar se apaga el
+  /// seguimiento (el GPS se apaga solo tras un rato sin uso).
+  Stream<LocationReadiness> readiness({
+    Duration every = const Duration(seconds: 2),
+  }) {
+    late final StreamController<LocationReadiness> controller;
+    StreamSubscription<Position>? updates;
+    Timer? ticker;
+    LocationReadiness? last;
+    var checking = false;
+
+    void emit(LocationReadiness value) {
+      if (controller.isClosed || value == last) return;
+      last = value;
+      controller.add(value);
+    }
+
+    LocationReadiness fromFeed() {
+      final p = _feed.latest;
+      final fresh =
+          p != null && _now().difference(p.timestamp) <= maxReadingAge;
+      return fresh && p.accuracy <= goodAccuracyMeters
+          ? LocationReadiness.ready
+          : LocationReadiness.searching;
+    }
+
+    Future<void> refresh() async {
+      if (checking) return;
+      checking = true;
+      try {
+        final on = await warmUp();
+        emit(on ? fromFeed() : LocationReadiness.off);
+      } finally {
+        checking = false;
+      }
+    }
+
+    controller = StreamController<LocationReadiness>(
+      onListen: () {
+        updates = _feed.updates.listen((_) => emit(fromFeed()));
+        ticker = Timer.periodic(every, (_) => refresh());
+        refresh();
+      },
+      onCancel: () async {
+        ticker?.cancel();
+        await updates?.cancel();
+      },
+    );
+    return controller.stream;
   }
 
   /// Espera una lectura reciente y precisa (≤ [goodAccuracyMeters]) hasta

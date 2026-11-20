@@ -12,6 +12,7 @@ import 'package:control_input_output/features/leave/presentation/date_range_shee
 import 'package:control_input_output/features/leave/presentation/home_page.dart';
 import 'package:control_input_output/features/leave/presentation/reasons_page.dart';
 import 'package:control_input_output/features/leave/presentation/scan_page.dart';
+import 'package:control_input_output/features/leave/presentation/widgets/countdown_ring.dart';
 import 'package:control_input_output/features/leave/presentation/widgets/trip_card.dart';
 import 'package:control_input_output/features/leave/presentation/widgets/week_strip.dart';
 import 'package:flutter/material.dart';
@@ -288,6 +289,111 @@ void main() {
 
     await _tearDownTimers(tester);
   });
+
+  testWidgets('ReasonsPage invita a elegir y dice de qué predio es', (
+    tester,
+  ) async {
+    final api = _FakeLeaveService(
+      reasonsResponse: const [LeaveReasonOption('Cita médica')],
+    );
+    Future<void> open(String qr) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: ReasonsPage(
+            key: ValueKey(qr),
+            qrData: qr,
+            leaveTicket: 't',
+            leaveService: api,
+          ),
+        ),
+      );
+      await _settle(tester);
+    }
+
+    await open('Predio Central+uuid');
+    expect(find.text('Elige tu motivo de salida'), findsOneWidget);
+    expect(find.text('Toca uno para registrar tu salida'), findsOneWidget);
+    // Si el nombre ya empieza con «Predio» no se repite.
+    expect(find.text('Predio Central'), findsOneWidget);
+
+    await open('Prado+uuid');
+    expect(find.text('Predio Prado'), findsOneWidget);
+
+    await _tearDownTimers(tester);
+  });
+
+  testWidgets('ReasonsPage muestra los segundos que quedan en un anillo', (
+    tester,
+  ) async {
+    var now = DateTime(2026, 11, 19, 12, 0, 0);
+    final api = _FakeLeaveService(
+      reasonsResponse: const [LeaveReasonOption('Cita médica')],
+    );
+    await tester.pumpWidget(
+      MaterialApp(
+        home: ReasonsPage(
+          qrData: 'Predio Central+uuid',
+          leaveTicket: 't',
+          ticketExpiresAt: now.add(const Duration(seconds: 30)),
+          leaveService: api,
+          clock: () => now,
+        ),
+      ),
+    );
+    await _settle(tester);
+
+    expect(find.byType(CountdownRing), findsOneWidget);
+    expect(find.text('30'), findsOneWidget);
+
+    now = now.add(const Duration(seconds: 22));
+    await tester.pump(const Duration(seconds: 1));
+    expect(find.text('8'), findsOneWidget);
+    expect(find.text('30'), findsNothing);
+
+    await _tearDownTimers(tester);
+  });
+
+  for (final entry in _phoneSizes.entries) {
+    testWidgets('ReasonsPage con muchos motivos largos no desborda en '
+        '${entry.key}', (tester) async {
+      tester.view.physicalSize = entry.value;
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+
+      final api = _FakeLeaveService(
+        reasonsResponse: LeaveReasonOption.listFromJson({
+          'reasons': [
+            for (var i = 1; i <= 12; i++)
+              'Reunión externa con proveedores del servicio número $i',
+          ],
+          'blocked_reasons': [
+            {
+              'name': 'Reunión externa con proveedores del servicio número 3',
+              'limit': 1,
+              'used': 1,
+              'period': 'day',
+            },
+          ],
+        }),
+      );
+      await tester.pumpWidget(
+        MaterialApp(
+          home: ReasonsPage(
+            qrData: 'Predio Central Norte del Departamento+uuid',
+            leaveTicket: 't',
+            ticketExpiresAt: DateTime.now().add(const Duration(seconds: 40)),
+            leaveService: api,
+          ),
+        ),
+      );
+      await _settle(tester);
+
+      expect(tester.takeException(), isNull);
+      expect(find.text('Elige tu motivo de salida'), findsOneWidget);
+
+      await _tearDownTimers(tester);
+    });
+  }
 
   test('LeaveReasonOption lee los motivos y los límites por período', () {
     final options = LeaveReasonOption.listFromJson({

@@ -5,11 +5,14 @@ import 'package:flutter/material.dart';
 import '../../../core/location/location_service.dart';
 import '../../../core/network/api_exceptions.dart';
 import '../../../core/theme/app_colors.dart';
+import '../../../core/theme/app_text_styles.dart';
 import '../../../core/widgets/app_popup.dart';
+import '../../../core/widgets/app_primary_button.dart';
 import '../../auth/presentation/login_page.dart';
 import '../data/leave_service.dart';
 import '../models/leave_reason.dart';
 import 'home_page.dart';
+import 'widgets/countdown_ring.dart';
 
 class ReasonsPage extends StatefulWidget {
   final String qrData;
@@ -25,12 +28,16 @@ class ReasonsPage extends StatefulWidget {
   /// Permite inyectar un [LeaveService] de prueba (p. ej. en tests de widgets).
   final LeaveService? leaveService;
 
+  /// Reloj de la cuenta atrás (pruebas); por defecto la hora real.
+  final DateTime Function()? clock;
+
   const ReasonsPage({
     super.key,
     required this.qrData,
     required this.leaveTicket,
     this.ticketExpiresAt,
     this.leaveService,
+    this.clock,
   });
 
   @override
@@ -50,9 +57,8 @@ class _ReasonsPageState extends State<ReasonsPage> {
   Timer? _countdownTimer;
   int? _secondsLeft;
 
-  static const primaryRed = AppColors.primaryRed;
-  static const darkText = AppColors.darkText;
-  static const lightBg = AppColors.lightBg;
+  /// Segundos con los que empezó la cuenta atrás: el anillo parte lleno.
+  int _totalSeconds = 1;
 
   @override
   void initState() {
@@ -68,15 +74,19 @@ class _ReasonsPageState extends State<ReasonsPage> {
     super.dispose();
   }
 
+  DateTime _now() => (widget.clock ?? DateTime.now)();
+
   /// Cuenta atrás visible: el usuario tiene hasta que el comprobante venza
   /// para elegir el motivo. Si se acaba el tiempo, vuelve solo al inicio.
   void _startCountdown() {
     final expiresAt = widget.ticketExpiresAt;
     if (expiresAt == null) return;
 
+    _totalSeconds = expiresAt.difference(_now()).inSeconds.clamp(1, 3600);
+
     void tick() {
       if (!mounted) return;
-      final remaining = expiresAt.difference(DateTime.now()).inSeconds;
+      final remaining = expiresAt.difference(_now()).inSeconds;
       setState(() => _secondsLeft = remaining < 0 ? 0 : remaining);
       if (remaining <= 0) {
         _countdownTimer?.cancel();
@@ -201,168 +211,172 @@ class _ReasonsPageState extends State<ReasonsPage> {
     }
   }
 
+  /// «Predio Prado»; si el nombre ya empieza con «Predio» se deja igual.
+  String get _premiseLabel {
+    final name = _namePremise.trim();
+    if (name.isEmpty) return 'Predio';
+    return name.toLowerCase().startsWith('predio') ? name : 'Predio $name';
+  }
+
+  double _sidePadding(double width) => width > 600
+      ? (width - 520) / 2
+      : width < 360
+      ? 16.0
+      : 22.0;
+
   @override
   Widget build(BuildContext context) {
+    final width = MediaQuery.sizeOf(context).width;
+    final pad = _sidePadding(width);
+
     return Scaffold(
-      appBar: AppBar(
-        title: const FittedBox(
-          fit: BoxFit.scaleDown,
-          child: Text(
-            'SELECCIONAR MOTIVO DE SALIDA',
-            style: TextStyle(
-              color: darkText,
-              fontSize: 18,
-              fontWeight: FontWeight.bold,
-            ),
-          ),
-        ),
-        centerTitle: true,
-        backgroundColor: lightBg,
-        surfaceTintColor: Colors.transparent,
-        elevation: 0,
-        iconTheme: const IconThemeData(color: darkText),
-        actions: [
-          if (_secondsLeft != null) _buildCountdownBadge(),
-          const SizedBox(width: 12),
-        ],
-      ),
+      backgroundColor: AppColors.lightBg,
       body: SafeArea(
         bottom: false,
-        child: RefreshIndicator(
-          onRefresh: _refreshData,
-          color: Colors.white,
-          backgroundColor: primaryRed,
-          child: _buildBody(),
+        child: Column(
+          children: [
+            Padding(
+              padding: EdgeInsets.fromLTRB(pad, 20, pad, 0),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  _BackButton(onTap: () => Navigator.maybePop(context)),
+                  if (_secondsLeft != null)
+                    CountdownRing(
+                      secondsLeft: _secondsLeft!,
+                      totalSeconds: _totalSeconds,
+                    )
+                  else
+                    const SizedBox(height: 54),
+                ],
+              ),
+            ),
+            Expanded(
+              child: RefreshIndicator(
+                onRefresh: _refreshData,
+                color: Colors.white,
+                backgroundColor: AppColors.primaryRed,
+                child: _buildBody(pad),
+              ),
+            ),
+          ],
         ),
       ),
     );
   }
 
-  Widget _buildCountdownBadge() {
-    final seconds = _secondsLeft ?? 0;
-    final isUrgent = seconds <= 10;
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-      decoration: BoxDecoration(
-        color: isUrgent
-            ? primaryRed.withValues(alpha: 0.12)
-            : Colors.grey.shade200,
-        borderRadius: BorderRadius.circular(20),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(
-            Icons.timer_outlined,
-            size: 16,
-            color: isUrgent ? primaryRed : Colors.grey.shade700,
+  Widget _buildBody(double pad) {
+    return ListView(
+      physics: const AlwaysScrollableScrollPhysics(),
+      padding: EdgeInsets.fromLTRB(pad, 14, pad, 24),
+      children: [
+        const Text(
+          'Elige tu motivo de salida',
+          style: TextStyle(
+            fontSize: 26,
+            fontWeight: FontWeight.w800,
+            letterSpacing: -0.4,
+            height: 1.15,
+            color: AppColors.darkText,
           ),
-          const SizedBox(width: 4),
-          Text(
-            '${seconds}s',
-            style: TextStyle(
-              fontSize: 13,
-              fontWeight: FontWeight.bold,
-              color: isUrgent ? primaryRed : Colors.grey.shade700,
+        ),
+        const SizedBox(height: 4),
+        const Text('Toca uno para registrar tu salida', style: AppText.caption),
+        const SizedBox(height: 14),
+        Align(
+          alignment: Alignment.centerLeft,
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+            decoration: BoxDecoration(
+              color: AppColors.infoBg,
+              borderRadius: BorderRadius.circular(999),
             ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildBody() {
-    if (_isLoading) {
-      return const Center(child: CircularProgressIndicator(color: primaryRed));
-    }
-
-    if (_errorMessage != null) {
-      return ListView(
-        physics: const AlwaysScrollableScrollPhysics(),
-        padding: const EdgeInsets.symmetric(horizontal: 24),
-        children: [
-          SizedBox(
-            height: MediaQuery.sizeOf(context).height * 0.6,
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
               children: [
-                Icon(
-                  Icons.error_outline_rounded,
-                  size: 48,
-                  color: Colors.grey.shade400,
+                const Icon(
+                  Icons.place_outlined,
+                  size: 16,
+                  color: AppColors.info,
                 ),
-                const SizedBox(height: 12),
-                Text(
-                  _errorMessage!,
-                  textAlign: TextAlign.center,
-                  style: TextStyle(color: Colors.grey.shade700, fontSize: 15),
-                ),
-                const SizedBox(height: 16),
-                TextButton.icon(
-                  onPressed: _loadReasons,
-                  icon: const Icon(Icons.refresh_rounded, color: primaryRed),
-                  label: const Text(
-                    'Reintentar',
-                    style: TextStyle(color: primaryRed),
+                const SizedBox(width: 8),
+                Flexible(
+                  child: Text(
+                    _premiseLabel,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w700,
+                      color: AppColors.darkText,
+                    ),
                   ),
                 ),
               ],
             ),
           ),
-        ],
-      );
+        ),
+        const SizedBox(height: 16),
+        ..._buildContent(),
+      ],
+    );
+  }
+
+  List<Widget> _buildContent() {
+    if (_isLoading) {
+      return const [
+        Padding(
+          padding: EdgeInsets.symmetric(vertical: 48),
+          child: Center(
+            child: CircularProgressIndicator(color: AppColors.primaryRed),
+          ),
+        ),
+      ];
+    }
+
+    if (_errorMessage != null) {
+      return [
+        Padding(
+          padding: const EdgeInsets.symmetric(vertical: 32),
+          child: Column(
+            children: [
+              Icon(
+                Icons.error_outline_rounded,
+                size: 48,
+                color: Colors.grey.shade400,
+              ),
+              const SizedBox(height: 12),
+              Text(
+                _errorMessage!,
+                textAlign: TextAlign.center,
+                style: AppText.body.copyWith(color: AppColors.info),
+              ),
+              const SizedBox(height: 20),
+              AppPrimaryButton(
+                label: 'Reintentar',
+                icon: Icons.refresh_rounded,
+                onPressed: _loadReasons,
+              ),
+            ],
+          ),
+        ),
+      ];
     }
 
     if (_reasons.isEmpty) {
-      return ListView(
-        physics: const AlwaysScrollableScrollPhysics(),
-        padding: const EdgeInsets.symmetric(horizontal: 24),
-        children: [
-          SizedBox(
-            height: MediaQuery.sizeOf(context).height * 0.6,
-            child: Center(
-              child: Text(
-                'No hay motivos disponibles para este predio.',
-                textAlign: TextAlign.center,
-                style: TextStyle(color: Colors.grey.shade600, fontSize: 15),
-              ),
-            ),
+      return const [
+        Padding(
+          padding: EdgeInsets.symmetric(vertical: 48),
+          child: Text(
+            'No hay motivos disponibles para este predio.',
+            textAlign: TextAlign.center,
+            style: AppText.caption,
           ),
-        ],
-      );
+        ),
+      ];
     }
 
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        // Adaptabilidad según el ancho del teléfono (o tablet en horizontal)
-        final double width = constraints.maxWidth;
-        final double horizontalPadding = width > 600
-            ? (width - 520) / 2
-            : width < 360
-            ? 16.0
-            : 28.0;
-
-        return ListView(
-          physics: const AlwaysScrollableScrollPhysics(),
-          padding: EdgeInsets.symmetric(
-            horizontal: horizontalPadding,
-            vertical: 16.0,
-          ),
-          children: [
-            Text(
-              'Toca el motivo de tu salida para registrarla',
-              style: TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.w600,
-                color: Colors.grey.shade800,
-              ),
-            ),
-            const SizedBox(height: 16),
-            ..._reasons.map((reason) => _buildReasonTile(reason)),
-          ],
-        );
-      },
-    );
+    return [for (final reason in _reasons) _buildReasonTile(reason)];
   }
 
   Widget _buildReasonTile(LeaveReasonOption option) {
@@ -370,14 +384,15 @@ class _ReasonsPageState extends State<ReasonsPage> {
     // El motivo tocado, mientras se registra la salida.
     final isSelected =
         !blocked && _isSubmitting && _selectedReason == option.name;
+    final radius = BorderRadius.circular(AppDimens.radiusButton);
 
     return Padding(
-      padding: const EdgeInsets.only(bottom: 12.0),
+      padding: const EdgeInsets.only(bottom: 10),
       child: Material(
-        color: blocked ? Colors.grey.shade100 : Colors.white,
-        borderRadius: BorderRadius.circular(12),
+        color: blocked ? AppColors.infoBg : Colors.white,
+        borderRadius: radius,
         child: InkWell(
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: radius,
           // Un motivo que llegó a su límite no se puede elegir; mientras se
           // registra una salida tampoco se puede tocar otro.
           onTap: blocked || _isSubmitting
@@ -385,58 +400,117 @@ class _ReasonsPageState extends State<ReasonsPage> {
               : () => _confirmSelection(option.name),
           child: AnimatedContainer(
             duration: const Duration(milliseconds: 180),
-            padding: const EdgeInsets.symmetric(
-              vertical: 16.0,
-              horizontal: 16.0,
-            ),
+            constraints: const BoxConstraints(minHeight: 62),
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
             decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(12),
+              borderRadius: radius,
               border: Border.all(
-                color: isSelected ? primaryRed : Colors.grey.shade300,
-                width: isSelected ? 2.0 : 1.0,
+                color: isSelected
+                    ? AppColors.primaryRed
+                    : blocked
+                    ? const Color(0xFFE6E6E6)
+                    : const Color(0xFFE0E0E0),
+                width: isSelected ? 2.0 : 1.5,
               ),
             ),
-            // Botón de solo texto, sin íconos ni círculos.
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
+            child: Row(
               children: [
-                Text(
-                  option.name,
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: isSelected ? FontWeight.bold : FontWeight.w600,
-                    color: blocked
-                        ? Colors.grey.shade600
-                        : isSelected
-                        ? primaryRed
-                        : darkText,
+                Expanded(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        option.name,
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w700,
+                          color: blocked
+                              ? const Color(0xFF777777)
+                              : isSelected
+                              ? AppColors.primaryRed
+                              : AppColors.darkText,
+                        ),
+                      ),
+                      if (blocked)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 2),
+                          child: Text(
+                            option.blockedNote!,
+                            style: const TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w700,
+                              color: AppColors.danger,
+                            ),
+                          ),
+                        ),
+                    ],
                   ),
                 ),
-                if (blocked)
-                  Padding(
-                    padding: const EdgeInsets.only(top: 2),
-                    child: Text(
-                      option.blockedNote!,
-                      textAlign: TextAlign.center,
-                      style: const TextStyle(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w600,
-                        color: AppColors.danger,
-                      ),
-                    ),
-                  ),
                 // Mientras se registra la salida con este motivo.
                 if (isSelected)
                   const Padding(
-                    padding: EdgeInsets.only(top: 10),
-                    child: LinearProgressIndicator(
-                      minHeight: 3,
-                      color: primaryRed,
+                    padding: EdgeInsets.only(left: 10),
+                    child: SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2.5,
+                        color: AppColors.primaryRed,
+                      ),
+                    ),
+                  )
+                else if (!blocked)
+                  const Padding(
+                    padding: EdgeInsets.only(left: 10),
+                    child: Icon(
+                      Icons.chevron_right_rounded,
+                      size: 24,
+                      color: Color(0xFFBBBBBB),
                     ),
                   ),
               ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Botón cuadrado de volver, igual al de las demás pantallas.
+class _BackButton extends StatelessWidget {
+  final VoidCallback onTap;
+
+  const _BackButton({required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return Tooltip(
+      message: 'Volver',
+      child: Semantics(
+        button: true,
+        label: 'Volver',
+        excludeSemantics: true,
+        child: Material(
+          color: Colors.white,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+            side: const BorderSide(color: Color(0xFFE0E0E0)),
+          ),
+          child: InkWell(
+            customBorder: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
+            onTap: onTap,
+            child: const SizedBox(
+              width: 44,
+              height: 44,
+              child: Icon(
+                Icons.chevron_left_rounded,
+                size: 26,
+                color: AppColors.darkText,
+              ),
             ),
           ),
         ),

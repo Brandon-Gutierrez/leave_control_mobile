@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../theme/app_colors.dart';
+import '../theme/app_text_styles.dart';
 
 enum PopupKind { success, error }
 
@@ -67,64 +68,79 @@ class _PopupCardState extends State<_PopupCard> {
   Widget build(BuildContext context) {
     final isError = widget.kind == PopupKind.error;
     final color = isError ? AppColors.danger : AppColors.success;
+    final tint = isError ? AppColors.dangerBg : AppColors.successBg;
     return Positioned(
       top: MediaQuery.of(context).padding.top + 12,
       left: 12,
       right: 12,
       child: Material(
         color: Colors.transparent,
-        child: Container(
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(6),
-            border: Border(left: BorderSide(color: color, width: 8)),
-            boxShadow: const [
-              BoxShadow(
-                color: Colors.black26,
-                blurRadius: 12,
-                offset: Offset(0, 4),
-              ),
-            ],
-          ),
-          padding: const EdgeInsets.fromLTRB(14, 12, 4, 12),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Icon(
-                isError ? Icons.error_rounded : Icons.check_circle_rounded,
-                color: color,
-                size: 30,
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      isError ? 'Algo salió mal' : 'Listo',
-                      style: TextStyle(
-                        color: color,
-                        fontWeight: FontWeight.w800,
-                        fontSize: 16,
-                      ),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      widget.message,
-                      style: const TextStyle(
-                        fontSize: 15,
-                        color: AppColors.darkText,
-                      ),
-                    ),
-                  ],
+        child: Semantics(
+          liveRegion: true,
+          child: Container(
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(AppDimens.radiusButton),
+              border: Border.all(color: color.withValues(alpha: 0.25)),
+              boxShadow: const [
+                BoxShadow(
+                  color: Color(0x26000000),
+                  blurRadius: 20,
+                  offset: Offset(0, 6),
                 ),
-              ),
-              IconButton(
-                tooltip: 'Cerrar',
-                icon: const Icon(Icons.close_rounded, size: 22),
-                onPressed: widget.onClose,
-              ),
-            ],
+              ],
+            ),
+            padding: const EdgeInsets.fromLTRB(12, 12, 4, 12),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Container(
+                  width: 38,
+                  height: 38,
+                  decoration: BoxDecoration(
+                    color: tint,
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(
+                    isError ? Icons.priority_high_rounded : Icons.check_rounded,
+                    color: color,
+                    size: 22,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Padding(
+                    padding: const EdgeInsets.only(top: 1),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          isError ? 'Algo salió mal' : 'Listo',
+                          style: TextStyle(
+                            color: color,
+                            fontWeight: FontWeight.w800,
+                            fontSize: 16,
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          widget.message,
+                          style: const TextStyle(
+                            fontSize: 14,
+                            color: AppColors.darkText,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                IconButton(
+                  tooltip: 'Cerrar',
+                  icon: const Icon(Icons.close_rounded, size: 22),
+                  onPressed: widget.onClose,
+                ),
+              ],
+            ),
           ),
         ),
       ),
